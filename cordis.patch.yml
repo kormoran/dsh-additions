@@ -1,0 +1,10 @@
+# dsh-chatshifter bundle patch: inserts the host row into the profile roster.
+# The node half (exports ".") serves /api/chatshifter.* routes; the browser half
+# (exports "./client", declared in package.json dsh.client) adds the
+# "Sposta nel workspace…" action to the Session context menu and talks to them.
+- insert:
+    - id: chatshifter
+      name: 'dsh-chatshifter'
+      config:
+        # Hide the original chat (registry archive) once the copy is safe.
+        archiveSource: true

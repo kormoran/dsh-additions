@@ -1,0 +1,37 @@
+{
+  "name": "dsh-chatshifter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Move a DeepSeek Harness chat to another workspace, carrying its history with it.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "dsh",
+    "workspace",
+    "session"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test --test-isolation=none tests/"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}

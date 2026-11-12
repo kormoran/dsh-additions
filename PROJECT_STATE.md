@@ -1,92 +1,168 @@
-# PROJECT_STATE — dsh-session-mover
+# PROJECT_STATE — dsh-chatshifter
 
-Memoria permanente del progetto durante la transizione. Aggiornato: **2026-11-12**, sessione con cwd `C:\Users\m.soricetti\Documents\deepseek-harness\default-workspace`.
+Memoria permanente del progetto. Aggiornato: **2026-11-12**, sessione con cwd
+`C:\Users\m.soricetti\Documents\GitHub\dsh-chatshifter`.
 
 ## Obiettivo
 
-Un plugin per DeepSeek Harness che **sposti una chat in un altro workspace**, portandosi dietro contesto e memorie — o, equivalentemente, che assegni un nuovo workspace a una chat esistente.
+Un plugin per DeepSeek Harness che **sposti una chat in un altro workspace**,
+portandosi dietro contesto e memorie — o, equivalentemente, assegni un nuovo
+workspace a una chat esistente.
 
-## Stato: POC riuscito
+## Stato: plugin vero sviluppato, installato e attivo
 
-Il meccanismo funziona. Una sessione è stata creata in un workspace diverso con la storia di un'altra dentro:
+`dsh-chatshifter` v0.1.0 è nel profilo `web` (bundle `link:` a questo repo) e la
+sua riga host è `active`. Il vecchio probe `dsh-session-mover-probe` è stato
+rimosso dal profilo (resta una junction orfana in
+`~/.dsh/profiles/web/node_modules/`, non più referenziata da `package.json`).
 
+Verificato:
+
+```text
+host  GET  /api/chatshifter.info → 200 {"ok":true,...,"archiveSource":true}   (cookie owner reale)
+client bundle servito: /plugins/??dsh-chatshifter/client.js&rev=<rev> → 200 (contenuto del repo)
+test:  21/21 unitari verdi
+integrazione con backend JSONL reale: spostamento a freddo + a caldo (fork-derived) riusciti,
+         copia riaperta con la stessa storia e lo stesso cut
 ```
-source:  session-e155ca60-…  cwd …\default-workspace   3 eventi
-created: session-1           cwd …\GitHub\dsh-locale-it 4 eventi, inheritedEventCount 3, listed: true
-```
 
-Report completo in `probe-report.json` (rigenerato a ogni attivazione del probe).
+Non ancora verificato a video (serve un click dell'utente): comparsa della voce
+nel menu e flusso conferma → spostamento → riga nella sidebar.
+
+## Architettura scelta: clonazione del log
+
+Lo spostamento **non** riscrive il log originale (niente cambio di `cwd` a
+mano, niente lock di scrittura): crea una **nuova sessione persistita** sotto il
+workspace di destinazione con gli stessi eventi e un nuovo id.
+
+1. **Leggi la sorgente** — viva: `ctx.sessions.get(id)` + `snapshotEvents()`
+   (la memoria è più fresca del disco); fredda: `ctx.sessionPersistence.open(id,'read')`
+   (funziona anche mentre un altro handle possiede la scrittura).
+2. **Risolvi la destinazione** — `workspaceRegistry.get(workspaceId)` oppure
+   `resolveByPath(path)`/`create(path)` per una cartella scelta.
+3. **Scrivi la copia** — `sessionPersistence.create(header, { inheritedEventCount })`
+   → `append(events)` → `flush()` (materializza) → `close()`.
+   Header: stessa `version`, nuovo `session-<uuid>`, `cwd = workspace.path`,
+   `isSeeded`/cut copiati dalla sorgente, `agentPreset` copiato se presente.
+4. **Registra** — `Workspace.attachSession(newId)` (valida `realpath(cwd) === workspace.path`).
+5. **Nascondi l'originale** — `workspaceRegistry.archiveSession(sourceId, { stopActivity: true })`,
+   reversibile con «Ripristina». Config `archiveSource: false` (o `keepOriginal` per
+   chiamata) lascia entrambe visibili.
+
+Interfaccia: `POST /api/chatshifter.move` (rotta esatta dietro il fence di
+autenticazione della connessione, solo Peer owner) e `GET /api/chatshifter.info`.
+Client: contributo `ctx.contextMenus.register({ target: 'session' })` con
+sottomento «Sposta nel workspace…», avviso esplicito via `window.confirm`,
+`ctx.sessions.refresh()` dopo il successo.
 
 ## Scoperte verificate (non ipotesi)
 
-1. **Le sessioni sono organizzate per workspace su disco**
-   `~/.dsh/sessions/--<cwd normalizzato>--/session-<id>/session.v4.jsonl.zstd`
-   L'appartenenza a un workspace *è* il nome della cartella che contiene il log.
+1. **Il primitivo giusto è `ctx.sessionPersistence`, non `ctx.sessions.create`**
+   `create(header, {inheritedEventCount})` + `append` + `flush` materializza un
+   log sotto `<root>/--<cwd normalizzato>--/<id>/session.v<N>.jsonl.zstd`.
+   `ctx.sessions.create` da solo non persiste nulla (confermava il POC).
+2. **Regola di formato: un log con marcatore `session/end-seed` deve restare `isSeeded`**
+   `dsh-session-format-v3-to-v4` rifiuta in lettura un header unseeded che
+   contiene il marcatore (`format v4 unseeded Session contains an inherited end-seed marker`).
+   Quindi la copia deve propagare `isSeeded` e `inheritedEventCount` della
+   sorgente; un header unseeded con marcatore produce una chat "spostata" ma
+   illeggibile. È il bug più insidioso incontrato (l'integrazione col backend
+   reale lo ha preso; i test con mock no).
+3. **`attachSession` rilegge l'header dalla persistenza** (cache per id, poi
+   `listStoredHeaders`) e pretende `realpath(header.cwd) === workspace.path` e
+   directory esistente. Usare `workspace.path` (canonico) come `cwd` della copia.
+4. **Le rotte esatte si registrano con `ctx.connection.fetch.register({path,
+   methods, requestBody:'buffered', fetch})`**, dentro `ctx.effect` per la
+   durata del plugin; sono autenticate dal carrier e rispondono solo al Peer
+   owner.
+5. **Un bundle browser si scrive a mano senza build**
+   `window.__ModuleLoader__.load({ id, factory })`; la factory è CJS
+   (`require`, `module.exports`) e il modulo esporta `apply`/`inject` per Cordis.
+   I moduli di piattaforma disponibili: `react`, `react/jsx-runtime`, `react-dom`,
+   `react-dom/client`, `@deepseek-ai/cordis`, `zod`, `@tanstack/react-virtual`,
+   `@deepseek-ai/dsh-client-store`, `dsh-client-ui-slots`, `-primitives`,
+   `-dockkit`. Servono `package.json` `dsh.client = { platform: 'web' }` e
+   l'export `"./client"`.
+6. **Il bundle è servito revisionato**: `/plugins/??<id>/client.js&rev=<rev>`,
+   con `rev` = sha1 a 12 hex di `plugin-artifact` su `String(mtimeMs)`,
+   `String(ctimeMs)`, `String(size)` (float, non troncati). Una `rev` vecchia dà
+   404. La revisione si rilegge solo al riavvio della voce Loader: dopo aver
+   modificato `lib/client.js` serve disabilitare/riabilitare la voce (o
+   riavviare DSH); il solo reload della pagina no.
+7. **Servizi client utili e stabili**: `ctx.contextMenus` (contributi
+   strutturati con `children` = sottomento), `ctx.workspaces.list.getSnapshot()`
+   (`{ items: WorkspaceView[], phase }`), `ctx.sessions.refresh()`,
+   `ctx.remote.directoryPicker.pick()`. Non serve importare pacchetti.
+8. **Ordine del menu sessione** (ui-workspace): pin 100, rename 200, fork 300,
+   id 450 (con separatore), archive 600. La nostra voce è a 400.
+9. **`node --test` sotto sandbox DSH fallisce** (`spawn EPERM`: i child process
+   non possono aprire pipe). Usare `node --test --test-isolation=none tests/`.
+10. **`mtimeMs`/`ctimeMs` / `size` del file client**: la revisione cambia anche
+    solo toccando il file; nessun hash del contenuto.
 
-2. **L'header della sessione porta la cwd**
-   `ctx.sessions.create(id, { meta: { cwd } })` — e in lettura `session.header.cwd`.
+## Cosa viaggia e cosa no
 
-3. **`fork()` NON cambia workspace**
-   `fork(source, boundary?, childSessionId?)` non ha un parametro di directory e copia la `cwd` del padre. Inutilizzabile per questo scopo.
-
-4. **`create()` accetta una storia iniziale**
-   `CreateSessionOptions = { seed?: SessionEvent[], inheritedEventCount?, meta?: { cwd?, isSeeded? } }`.
-   Con `seed` + `meta.cwd` si ottiene una sessione nuova, in un'altra directory, con la storia dentro. **È il primitivo del plugin.**
-
-5. **Un plugin installato fuori dall'albero dsh non può importare i pacchetti dsh**
-   `import('@deepseek-ai/dsh-session/fork')` fallisce: *Cannot find package*.
-   Conseguenza: niente `buildForkSeed`; si usa solo ciò che espone il servizio iniettato (`ctx.sessions`). Se un domani servisse un import, va dichiarato come dipendenza nel `package.json` del plugin.
-
-6. **La creazione è pigra**
-   `create()` non scrive su disco finché non arriva il primo `append`. La sessione creata dal POC è solo in memoria: non compare in `~/.dsh/sessions` e sparisce al riavvio. Non è un difetto, è il comportamento documentato — ma significa che il POC non ha sporcato l'archivio.
-
-7. **Gli allegati viaggiano gratis**
-   Sono in `~/.dsh/attachments` per hash del contenuto: i riferimenti restano validi in qualunque workspace.
-
-## Cosa NON viaggia (da decidere nel plugin vero)
-
-| | |
+| Viaggia | Non viaggia |
 |---|---|
-| Sotto-sessioni e subagenti | sono sessioni separate, non vengono clonate |
-| `AGENTS.md`, `.dsh/skills`, file di progetto | vivono nella directory: la chat spostata legge quelle del nuovo workspace |
-| L'identità della sessione | nasce un **nuovo id**: è una copia con storia, non la stessa chat |
+| storia completa, allegati (riferimenti per hash) | identità: nuovo id `session-<uuid>` |
+| titolo (`session/title` è nel log) | `AGENTS.md`, `.dsh/skills`, file di progetto |
+| preset agente registrato | sotto-sessioni, subagenti, job in background |
+| marcatura fork (`isSeeded` + cut) | permessi/impostazioni locali della cartella |
 
-## File del progetto (in questa workspace, temporanei)
+## File del progetto
 
 | Percorso | Ruolo |
 |---|---|
-| `packages/dsh-session-mover-probe/` | il probe, installato nel profilo `web` come bundle |
-| `packages/dsh-session-mover-probe/lib/index.js` | logica: legge sorgente, crea sessione seminata, scrive il report |
-| `packages/dsh-session-mover-probe/cordis.patch.yml` | configura il probe (sourceId, targetCwd, doCreate, reportPath) |
-| `probe-report.json` | l'esito dell'ultima attivazione |
-
-Il probe è **installato e attivo** nel profilo: va rimosso quando si passa al plugin vero.
-
-## Prossimi passi (plugin vero)
-
-1. **Interfaccia**: una voce «Sposta nel workspace…» con scelta della destinazione, oppure un comando. Serve un plugin client oltre a quello host.
-2. **Id**: generare `session-<uuid>` invece di lasciare l'id automatico (il POC ha ottenuto `session-1`).
-3. **Originale**: nasconderlo, non cancellarlo (`workspaceRegistry` ha `hide`/`restore`), così lo spostamento è reversibile.
-4. **Aviso esplicito** su cosa non viaggia (soprattutto `AGENTS.md`), prima della conferma.
-5. **Verifica**: dopo la creazione, materializzare la sessione (primo append) per accertarsi che compaia su disco sotto la cartella del nuovo workspace.
-6. **Verifica aperta**: la sidebar si riaggiorna a caldo dopo la creazione, o serve un riavvio?
+| `lib/index.js` | host: lettura sorgente, clone persistito, attach, archive, rotte `/api/chatshifter.*` |
+| `lib/client.js` | browser: bundle a mano, contributo menu sessione, conferma, esito |
+| `cordis.patch.yml` | riga `insert` del bundle nel profilo (config `archiveSource`) |
+| `package.json` | bundle + `dsh.client` + export `./client` |
+| `tests/host.test.js` | 12 test host con persistenza/registry finti |
+| `tests/client.test.js` | 9 test del bundle browser (vm, `window.__ModuleLoader__`) |
+| `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura, sposta a freddo e a caldo, riapre la copia |
+| `probe-report.json` | reperto storico del POC (non più usato) |
+| `PROJECT_STATE.md` | questo file |
 
 ## Come riprendere
 
-- La cartella canonica del progetto sarà `C:\Users\m.soricetti\Documents\GitHub\dsh-locale-it` (oggi contiene il language pack, non questo plugin) oppure una nuova directory da decidere.
-- **Aprire la sessione futura con quel workspace**, non con `default-workspace`: questa sessione qui non può scrivere fuori da `default-workspace` (sandbox), e il POC è nato dentro.
-- Comandi utili:
-
 ```powershell
-# rimuovere il probe dal profilo (a lavoro finito)
-dsh plugin --profile web remove dsh-session-mover-probe
+# test (sempre con isolation none sotto sandbox DSH)
+node --test --test-isolation=none tests/
 
-# ispezionare le sessioni su disco
-Get-ChildItem "$env:USERPROFILE\.dsh\sessions" -Directory
+# integrazione con il backend reale (percorso pacchetti opzionale)
+node scripts/integration.mjs
+
+# stato del profilo
+dsh plugin --profile web why dsh-chatshifter
+# oppure, dall'agente: plugin_manager list_plugins / list_bundles
 ```
 
-## Riferimenti
+Per aggiornare il plugin nel profilo live: il bundle è `link:`, quindi le
+modifiche a `lib/index.js` richiedono il riavvio della voce (toggle dalla
+pagina Plugin o riavvio DSH); per il client vedi la scoperta 6.
 
-- `@deepseek-ai/dsh-session` — README (fork, seed/restore, eventi) e `lib/types/index.d.ts`
-- `@deepseek-ai/dsh-workspace` — README: raggruppamento per directory, `hide`/`restore`
-- `@deepseek-ai/dsh-session-persistence-jsonl` — README: layout su disco, creazione pigra
+## Problemi aperti / prossimi passi
+
+1. **Smoke test in GUI** — ricaricare la pagina e provare il menu `⋯` su una
+   chat: la voce deve comparire tra fork e copia-id; deve funzionare la conferma,
+   lo spostamento, il refresh della lista e la scomparsa (archiviazione)
+   dell'originale. Verificare anche che la nuova riga compaia subito nel
+   workspace di destinazione o solo dopo un refresh della pagina.
+2. **Selezione della chat corrente** — archiviando l'originale lato host, il
+   client non azzera la selezione come fa l'azione Archive nativa; la chat
+   resta a video finché non si naviga. Valutare se chiudere la vista lato client.
+3. **Chat fork-derived** — una copia di una sessione già forkata resta
+   `isSeeded`: il provider di titolo automatico esclude le sessioni seed, quindi
+   se la sorgente non aveva ancora un evento `session/title` la copia può
+   restare senza titolo. Se fastidioso: generare un titolo al momento della
+   copia (append di `session/title` con il primo messaggio) oppure riscrivere il
+   log rimuovendo il marcatore (rinumerando le seq: rischioso).
+4. **Doppio spostamento della stessa copia** — funziona, ma allunga la catena di
+   marker; nessun problema noto.
+5. **Pulizia** — la junction orfana `dsh-session-mover-probe` nel profilo può
+   essere eliminata a mano; la cartella del probe nel vecchio workspace
+   (`Documents\deepseek-harness\default-workspace\packages\`) non serve più.
+6. **Distribuzione** — il repo è privato e installato via `link:`; per
+   distribuirlo come bundle GitHub basta pushare e usare
+   `plugin_manager install_bundle` con l'URL del repo (il `package.json` è già
+   pronto: bundle patch + client).
