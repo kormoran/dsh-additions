@@ -8,3 +8,8 @@ rev2.txt
 debug-output.txt
 cli-help.txt
 .tmp/
+dist/
+*.tgz
+.npm-cache/
+.DS_Store
+Thumbs.db

@@ -12,9 +12,10 @@ workspace a una chat esistente.
 ## Stato: plugin vero sviluppato, installato e attivo
 
 `dsh-chatshifter` v0.2.0 è nel profilo `web` (bundle `link:` a questo repo) e la
-sua riga host è `active`. Il vecchio probe `dsh-session-mover-probe` è stato
-rimosso dal profilo (resta una junction orfana in
-`~/.dsh/profiles/web/node_modules/`, non più referenziata da `package.json`).
+sua riga host è `active`. Il profilo è pulito: rimossi la junction orfana
+`dsh-session-mover-probe` e il link rotto `@local/dsh-locale-it`, e la vecchia
+cartella del probe nel workspace non esiste più. Il pacchetto è pronto per la
+distribuzione: tarball verificato in `dist/`.
 
 Verificato:
 
@@ -27,6 +28,8 @@ integrazione con backend JSONL reale: spostamento a freddo + a caldo (fork-deriv
 marker di consegna: la copia di una chat con marker `delivery-accepted` reali si riapre
          (prima falliva con `current-generation delivery marker names the wrong Session`)
 i18n: 9 lingue complete contro la baseline `zh` (test di completezza e segnaposto)
+profilo: pulito (nessun link orfano in `~/.dsh/profiles/web/node_modules`)
+pacchetto: dist/dsh-chatshifter-0.2.0.tgz — 7 file, 21,9 kB, sha256 0467ACD9…
 ```
 
 Verificato anche a video il 12/11: la chat spostata e riparata si apre con la
@@ -187,6 +190,22 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 - Verificato a video il 12/11: cambiando lingua dall'harness, menu, conferma ed
   esito del plugin seguono il locale attivo.
 
+## Distribuzione (v0.2.0)
+
+- `package.json` completo: autore, repository/homepage/bugs, `engines.node >=20`,
+  `publishConfig.access: public`, `files` whitelist, export `./cordis.patch.yml`
+  e `dsh.client.inject` del locale.
+- `LICENSE` MIT e `CHANGELOG.md` (0.1.0 → 0.1.1 → 0.2.0).
+- `dist/dsh-chatshifter-0.2.0.tgz`: 7 file (lib, cordis.patch.yml, README,
+  LICENSE, CHANGELOG, package.json), 21,9 kB, SHA-256
+  `0467ACD92DA401C9398133060930669C6B2148F2910307D783BE616F40A86C12`.
+  Il tarball è stato estratto e il modulo host importato con successo.
+- Il nome npm `dsh-chatshifter` è libero (404 sul registry); il repo GitHub è
+  privato, quindi l'installazione `github:` richiede credenziali o la
+  pubblicazione del repo.
+- Canali pronti: tarball (`dsh plugin add <file>.tgz`), npm (`npm publish`),
+  GitHub (`dsh plugin add github:kormoran/dsh-chatshifter`).
+
 ## File del progetto
 
 | Percorso | Ruolo |
@@ -200,6 +219,9 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 | `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura (preferendo una con watermark), sposta a freddo e a caldo, riapre la copia |
 | `scripts/repro-delivery.mjs` | riproduce il guasto dei marker di consegna su una sessione reale (diagnostica) |
 | `scripts/repair-delivery.mjs` | ripara una copia già corrotta ri-puntando i marker, con dry-run e `--apply` |
+| `LICENSE` | licenza MIT |
+| `CHANGELOG.md` | cronologia 0.1.0 → 0.1.1 → 0.2.0 |
+| `dist/dsh-chatshifter-<version>.tgz` | tarball generato da `npm pack`, non versionato |
 | `probe-report.json` | reperto storico del POC (non più usato) |
 | `PROJECT_STATE.md` | questo file |
 
@@ -211,6 +233,10 @@ node --test --test-isolation=none tests/
 
 # integrazione con il backend reale (percorso pacchetti opzionale)
 node scripts/integration.mjs
+
+# packaging per la distribuzione
+npm test
+npm pack --pack-destination dist
 
 # stato del profilo
 dsh plugin --profile web why dsh-chatshifter
@@ -238,10 +264,7 @@ l'originale viene archiviato. Restano, in ordine di utilità:
    log rimuovendo il marcatore (rinumerando le seq: rischioso).
 3. **Doppio spostamento della stessa copia** — funziona, ma allunga la catena di
    marker; nessun problema noto.
-4. **Pulizia** — la junction orfana `dsh-session-mover-probe` nel profilo può
-   essere eliminata a mano; la cartella del probe nel vecchio workspace
-   (`Documents\deepseek-harness\default-workspace\packages\`) non serve più.
-5. **Distribuzione** — il repo è privato e installato via `link:`; per
-   distribuirlo come bundle GitHub basta pushare e usare
-   `plugin_manager install_bundle` con l'URL del repo (il `package.json` è già
-   pronto: bundle patch + client).
+4. **Distribuzione** — il pacchetto è pronto (metadata, LICENSE, CHANGELOG,
+   tarball verificato). Resta da scegliere il canale: `npm publish` (nome libero,
+   serve un account npm), oppure rendere pubblico il repo per l'installazione
+   GitHub; il repo è privato, quindi il tarball è il canale immediato.

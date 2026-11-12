@@ -1,37 +1,62 @@
 {
   "name": "dsh-chatshifter",
   "version": "0.2.0",
-  "private": true,
   "description": "Move a DeepSeek Harness chat to another workspace, carrying its history with it.",
+  "author": "Massimo Soricetti <massimo.soricetti@gmail.com>",
+  "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
   },
   "files": [
-    "lib",
+    "lib/index.js",
+    "lib/client.js",
     "cordis.patch.yml",
-    "README.md"
+    "CHANGELOG.md"
   ],
   "keywords": [
     "deepseek-harness",
-    "dsh-plugin",
+    "deepseek",
     "dsh",
+    "dsh-plugin",
     "workspace",
-    "session"
+    "session",
+    "chat",
+    "move",
+    "fork",
+    "i18n"
   ],
-  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kormoran/dsh-chatshifter.git"
+  },
+  "homepage": "https://github.com/kormoran/dsh-chatshifter#readme",
+  "bugs": {
+    "url": "https://github.com/kormoran/dsh-chatshifter/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "node --test --test-isolation=none tests/"
+    "test": "node --test --test-isolation=none tests/",
+    "pack": "npm pack --pack-destination dist"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "platform": "web"
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale"
+      ]
     }
   }
 }

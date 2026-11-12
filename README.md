@@ -67,6 +67,25 @@ codice sconosciuto ricade sul `message` inglese dell'host.
 
 ## Installazione
 
+Requisiti: DSH con profilo web e Node.js ≥ 20. Per l'italiano serve un language
+pack che registri `it` (`dsh-locale-it`).
+
+Da pacchetto (tarball o npm):
+
+```powershell
+dsh plugin --profile web add C:\percorso\dsh-chatshifter-0.2.0.tgz
+# quando pubblicato su npm:
+dsh plugin --profile web add dsh-chatshifter
+```
+
+Da repository GitHub, se il repository è accessibile:
+
+```powershell
+dsh plugin --profile web add github:kormoran/dsh-chatshifter
+```
+
+Per lo sviluppo, con link al checkout:
+
 ```powershell
 dsh plugin --profile web add link:C:\percorso\dsh-chatshifter
 ```
@@ -113,6 +132,30 @@ I test unitari usano servizi finti; `scripts/integration.mjs` compone lo
 `SessionStore` e il backend JSONL reali dall'installazione dsh locale, legge una
 sessione reale (in sola lettura) e verifica che la copia sia materializzata
 sotto il workspace di destinazione e riapribile con la stessa storia.
+
+## Distribuzione
+
+`package.json` è pronto per npm, per il tarball e per l'installazione da GitHub;
+il pacchetto spedisce solo `lib/`, `cordis.patch.yml`, README, LICENSE e
+CHANGELOG.
+
+```powershell
+npm test
+npm pack --pack-destination dist
+tar -tf dist\dsh-chatshifter-0.2.0.tgz
+```
+
+Poi scegli il canale:
+
+- **tarball** — distribuisci `dist\dsh-chatshifter-0.2.0.tgz` e installalo con
+  `dsh plugin --profile web add <file>.tgz`;
+- **npm** — `npm publish` (il nome `dsh-chatshifter` è libero; serve un account
+  npm);
+- **GitHub** — il repository deve essere pubblico o accessibile con credenziali;
+  poi `dsh plugin --profile web add github:kormoran/dsh-chatshifter`.
+
+Il tarball contiene i file dichiarati in `files`; `tests/`, `scripts/`,
+`PROJECT_STATE.md` e `probe-report.json` restano fuori dal pacchetto.
 
 ## Limiti noti
 
