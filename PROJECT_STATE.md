@@ -24,12 +24,12 @@ client bundle servito: /plugins/??dsh-chatshifter/client.js&rev=<rev> → 200 (c
 test:  23/23 unitari verdi
 integrazione con backend JSONL reale: spostamento a freddo + a caldo (fork-derived) riusciti,
          copia riaperta con la stessa storia e lo stesso cut
-marker di consegna: la copia di una chat con 51 `delivery-accepted` reali si riapre
+marker di consegna: la copia di una chat con marker `delivery-accepted` reali si riapre
          (prima falliva con `current-generation delivery marker names the wrong Session`)
 ```
 
-Non ancora verificato a video (serve un click dell'utente): comparsa della voce
-nel menu e flusso conferma → spostamento → riga nella sidebar.
+Verificato anche a video il 12/11: la chat spostata e riparata si apre con la
+cronologia, e le chat si spostano davvero da un workspace all'altro.
 
 ## Architettura scelta: clonazione del log
 
@@ -191,28 +191,25 @@ pagina Plugin o riavvio DSH); per il client vedi la scoperta 6.
 
 ## Problemi aperti / prossimi passi
 
-1. **Smoke test in GUI** — il primo giro ha trovato il bug dei marker di consegna
-   (corretto in v0.1.1) e la copia rotta è stata riparata; serve un secondo giro
-   per la verifica a video. Ricaricare la pagina e provare il menu `⋯` su una
-   chat: la voce deve comparire tra fork e copia-id; deve funzionare la conferma,
-   lo spostamento, il refresh della lista e la scomparsa (archiviazione)
-   dell'originale. Verificare anche che la nuova riga compaia subito nel
-   workspace di destinazione o solo dopo un refresh della pagina.
-2. **Selezione della chat corrente** — archiviando l'originale lato host, il
+Il primo smoke test in GUI è passato (12/11): la voce compare nel menu, la
+conferma sposta la chat, la riga compare nel workspace di destinazione e
+l'originale viene archiviato. Restano, in ordine di utilità:
+
+1. **Selezione della chat corrente** — archiviando l'originale lato host, il
    client non azzera la selezione come fa l'azione Archive nativa; la chat
    resta a video finché non si naviga. Valutare se chiudere la vista lato client.
-3. **Chat fork-derived** — una copia di una sessione già forkata resta
+2. **Chat fork-derived** — una copia di una sessione già forkata resta
    `isSeeded`: il provider di titolo automatico esclude le sessioni seed, quindi
    se la sorgente non aveva ancora un evento `session/title` la copia può
    restare senza titolo. Se fastidioso: generare un titolo al momento della
    copia (append di `session/title` con il primo messaggio) oppure riscrivere il
    log rimuovendo il marcatore (rinumerando le seq: rischioso).
-4. **Doppio spostamento della stessa copia** — funziona, ma allunga la catena di
+3. **Doppio spostamento della stessa copia** — funziona, ma allunga la catena di
    marker; nessun problema noto.
-5. **Pulizia** — la junction orfana `dsh-session-mover-probe` nel profilo può
+4. **Pulizia** — la junction orfana `dsh-session-mover-probe` nel profilo può
    essere eliminata a mano; la cartella del probe nel vecchio workspace
    (`Documents\deepseek-harness\default-workspace\packages\`) non serve più.
-6. **Distribuzione** — il repo è privato e installato via `link:`; per
+5. **Distribuzione** — il repo è privato e installato via `link:`; per
    distribuirlo come bundle GitHub basta pushare e usare
    `plugin_manager install_bundle` con l'URL del repo (il `package.json` è già
    pronto: bundle patch + client).
