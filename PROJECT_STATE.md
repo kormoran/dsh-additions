@@ -1,7 +1,7 @@
 # PROJECT_STATE — dsh-chatshifter
 
-Memoria permanente del progetto. Aggiornato: **2026-11-12**, sessione con cwd
-`C:\Users\m.soricetti\Documents\GitHub\dsh-chatshifter`.
+Memoria permanente del progetto. Aggiornato: **2026-11-12**, release **0.2.0**
+(commit `8ea2573`, tag `v0.2.0`). Il backlog per la 1.0.0 è in [TODO.md](TODO.md).
 
 ## Obiettivo
 
@@ -9,13 +9,14 @@ Un plugin per DeepSeek Harness che **sposti una chat in un altro workspace**,
 portandosi dietro contesto e memorie — o, equivalentemente, assegni un nuovo
 workspace a una chat esistente.
 
-## Stato: plugin vero sviluppato, installato e attivo
+## Stato: 0.2.0 finalizzata, installata e pacchettizzata
 
 `dsh-chatshifter` v0.2.0 è nel profilo `web` (bundle `link:` a questo repo) e la
 sua riga host è `active`. Il profilo è pulito: rimossi la junction orfana
 `dsh-session-mover-probe` e il link rotto `@local/dsh-locale-it`, e la vecchia
 cartella del probe nel workspace non esiste più. Il pacchetto è pronto per la
-distribuzione: tarball verificato in `dist/`.
+distribuzione: tarball verificato in `dist/`. Commit `8ea2573`, tag `v0.2.0`;
+la release **non è ancora pubblicata** (npm/GitHub: vedi [TODO.md](TODO.md)).
 
 Verificato:
 
@@ -30,11 +31,23 @@ marker di consegna: la copia di una chat con marker `delivery-accepted` reali si
 i18n: 9 lingue complete contro la baseline `zh` (test di completezza e segnaposto)
 profilo: pulito (nessun link orfano in `~/.dsh/profiles/web/node_modules`)
 pacchetto: dist/dsh-chatshifter-0.2.0.tgz — 7 file, 21,9 kB, sha256 0467ACD9…
+release: commit 8ea2573, tag v0.2.0 (non pubblicata)
 ```
 
 Verificato anche a video il 12/11: la chat spostata e riparata si apre con la
 cronologia, le chat si spostano davvero da un workspace all'altro e la UI del
 plugin segue la lingua scelta nelle impostazioni dell'harness.
+
+## Cosa è finalizzato
+
+| Milestone | Esito |
+|---|---|
+| **0.1.0** | Spostamento tra workspace: clonazione del log, attach, archiviazione reversibile, menu contestuale, conferma e report. |
+| **0.1.1** | Marker `delivery-accepted` ri-puntati alla copia; copia rotta riparata; tool di riproduzione e riparazione; integrazione con watermark reali. |
+| **0.2.0** | UI in 9 lingue (`zh`, `en`, `ja`, `es`, `fr`, `de`, `ru`, `pt`, `it`), `zh` baseline, errori host con `code`/`details`, menu che segue il locale. |
+| **Profilo** | Rimossi i due link orfani e la vecchia cartella del probe; profilo `web` pulito, plugin live ancora attivo. |
+| **Pacchetto** | `package.json` completo, LICENSE MIT, CHANGELOG, tarball verificato, import del modulo host riuscito, `npm pack` senza file interni. |
+| **Verifiche** | 28/28 test unitari, integrazione JSONL reale, smoke test GUI, cambio lingua a video, riparazione di `session-fb1907a8…` con 1321 eventi. |
 
 ## Architettura scelta: clonazione del log
 
@@ -203,8 +216,9 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 - Il nome npm `dsh-chatshifter` è libero (404 sul registry); il repo GitHub è
   privato, quindi l'installazione `github:` richiede credenziali o la
   pubblicazione del repo.
-- Canali pronti: tarball (`dsh plugin add <file>.tgz`), npm (`npm publish`),
-  GitHub (`dsh plugin add github:kormoran/dsh-chatshifter`).
+- Canali pronti ma **non pubblicati**: tarball (`dsh plugin add <file>.tgz`),
+  npm (`npm publish`), GitHub (`dsh plugin add github:kormoran/dsh-chatshifter`).
+  La scelta del canale e la pubblicazione sono in [TODO.md](TODO.md).
 
 ## File del progetto
 
@@ -223,6 +237,7 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 | `CHANGELOG.md` | cronologia 0.1.0 → 0.1.1 → 0.2.0 |
 | `dist/dsh-chatshifter-<version>.tgz` | tarball generato da `npm pack`, non versionato |
 | `probe-report.json` | reperto storico del POC (non più usato) |
+| `TODO.md` | backlog operativo per la 1.0.0 |
 | `PROJECT_STATE.md` | questo file |
 
 ## Come riprendere
@@ -247,24 +262,12 @@ Per aggiornare il plugin nel profilo live: il bundle è `link:`, quindi le
 modifiche a `lib/index.js` richiedono il riavvio della voce (toggle dalla
 pagina Plugin o riavvio DSH); per il client vedi la scoperta 6.
 
-## Problemi aperti / prossimi passi
+Domani (13/11): aprire [TODO.md](TODO.md) e partire dai P0.
 
-Il primo smoke test in GUI è passato (12/11): la voce compare nel menu, la
-conferma sposta la chat, la riga compare nel workspace di destinazione e
-l'originale viene archiviato. Restano, in ordine di utilità:
+## Prossimi passi
 
-1. **Selezione della chat corrente** — archiviando l'originale lato host, il
-   client non azzera la selezione come fa l'azione Archive nativa; la chat
-   resta a video finché non si naviga. Valutare se chiudere la vista lato client.
-2. **Chat fork-derived** — una copia di una sessione già forkata resta
-   `isSeeded`: il provider di titolo automatico esclude le sessioni seed, quindi
-   se la sorgente non aveva ancora un evento `session/title` la copia può
-   restare senza titolo. Se fastidioso: generare un titolo al momento della
-   copia (append di `session/title` con il primo messaggio) oppure riscrivere il
-   log rimuovendo il marcatore (rinumerando le seq: rischioso).
-3. **Doppio spostamento della stessa copia** — funziona, ma allunga la catena di
-   marker; nessun problema noto.
-4. **Distribuzione** — il pacchetto è pronto (metadata, LICENSE, CHANGELOG,
-   tarball verificato). Resta da scegliere il canale: `npm publish` (nome libero,
-   serve un account npm), oppure rendere pubblico il repo per l'installazione
-   GitHub; il repo è privato, quindi il tarball è il canale immediato.
+La 0.2.0 è finalizzata. Il backlog per la 1.0.0 — bloccanti su dati e
+compatibilità, qualità/CI, release — è in [TODO.md](TODO.md). Domani si riparte
+da lì; i primi tre punti sono: validazione della copia prima dell'archiviazione,
+gestione delle chat in esecuzione, cleanup/idempotenza quando `attachSession`
+fallisce.
