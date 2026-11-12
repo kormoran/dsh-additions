@@ -341,9 +341,9 @@ test('unknown sessions, workspaces, and relative paths are refused with codes', 
     const cases = [
       [{ sessionId: 'session-missing', workspaceId: parts.targetWorkspace.id }, 'session-not-found'],
       [{ sessionId: 'session-live', workspaceId: 'ws-missing' }, 'workspace-not-found'],
-      [{ sessionId: 'session-live', targetPath: 'relative/dir' }, 'invalid-path'],
-      [{ sessionId: 'session-live' }, 'invalid-request'],
-      [{}, 'invalid-request'],
+      [{ sessionId: 'session-live', targetPath: 'relative/dir' }, 'relative-path'],
+      [{ sessionId: 'session-live' }, 'missing-target'],
+      [{}, 'missing-session'],
     ]
     for (const [input, code] of cases) {
       await assert.rejects(
@@ -352,6 +352,29 @@ test('unknown sessions, workspaces, and relative paths are refused with codes', 
         `expected ${code} for ${JSON.stringify(input)}`,
       )
     }
+  } finally {
+    await parts.cleanup()
+  }
+})
+
+test('refusals carry a stable code, an English fallback and placeholder details', async () => {
+  const parts = await harness({ live: { events: [event(0)] } })
+  try {
+    await assert.rejects(
+      performMove(parts.ctx, {}, { sessionId: 'session-missing', workspaceId: parts.targetWorkspace.id }),
+      (error) =>
+        error instanceof MoveError &&
+        error.code === 'session-not-found' &&
+        error.details?.sessionId === 'session-missing' &&
+        /was not found/u.test(error.message),
+    )
+    await assert.rejects(
+      performMove(parts.ctx, {}, { sessionId: 'session-live', targetPath: 'relative/dir' }),
+      (error) =>
+        error instanceof MoveError &&
+        error.code === 'relative-path' &&
+        error.details?.path === 'relative/dir',
+    )
   } finally {
     await parts.cleanup()
   }
@@ -441,7 +464,7 @@ test('the HTTP routes answer with JSON and map expected refusals', async () => {
       .get(MOVE_PATH)
       .fetch(new Request(`http://localhost${MOVE_PATH}`, { method: 'POST', body: 'not json' }))
     assert.equal(badBody.status, 400)
-    assert.equal((await badBody.json()).error.code, 'invalid-request')
+    assert.equal((await badBody.json()).error.code, 'invalid-body')
 
     const okResponse = await routes.get(MOVE_PATH).fetch(
       new Request(`http://localhost${MOVE_PATH}`, {

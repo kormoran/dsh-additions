@@ -11,7 +11,7 @@ workspace a una chat esistente.
 
 ## Stato: plugin vero sviluppato, installato e attivo
 
-`dsh-chatshifter` v0.1.1 è nel profilo `web` (bundle `link:` a questo repo) e la
+`dsh-chatshifter` v0.2.0 è nel profilo `web` (bundle `link:` a questo repo) e la
 sua riga host è `active`. Il vecchio probe `dsh-session-mover-probe` è stato
 rimosso dal profilo (resta una junction orfana in
 `~/.dsh/profiles/web/node_modules/`, non più referenziata da `package.json`).
@@ -21,15 +21,17 @@ Verificato:
 ```text
 host  GET  /api/chatshifter.info → 200 {"ok":true,...,"archiveSource":true}   (cookie owner reale)
 client bundle servito: /plugins/??dsh-chatshifter/client.js&rev=<rev> → 200 (contenuto del repo)
-test:  23/23 unitari verdi
+test:  28/28 unitari verdi
 integrazione con backend JSONL reale: spostamento a freddo + a caldo (fork-derived) riusciti,
          copia riaperta con la stessa storia e lo stesso cut
 marker di consegna: la copia di una chat con marker `delivery-accepted` reali si riapre
          (prima falliva con `current-generation delivery marker names the wrong Session`)
+i18n: 9 lingue complete contro la baseline `zh` (test di completezza e segnaposto)
 ```
 
 Verificato anche a video il 12/11: la chat spostata e riparata si apre con la
-cronologia, e le chat si spostano davvero da un workspace all'altro.
+cronologia, le chat si spostano davvero da un workspace all'altro e la UI del
+plugin segue la lingua scelta nelle impostazioni dell'harness.
 
 ## Architettura scelta: clonazione del log
 
@@ -109,6 +111,18 @@ sottomento «Sposta nel workspace…», avviso esplicito via `window.confirm`,
     di un fork restano intestati all'antenato (eccezione prevista dal formato).
     Il primo spostamento reale creava una copia illeggibile: 170 marker su 1321
     eventi nominavano ancora la sorgente. Il watermark `throughSeq` non cambia.
+12. **Il locale client: `zh` è la baseline, `en` è obbligatorio**
+    `ctx.locale.register(ns, {zh, en, ja, es, fr, de, ru, pt})` (o la forma
+    per-lingua `register(ns, 'it', dict)`) registra dizionari piatti chiave →
+    testo con segnaposto `{name}`; il lookup segue catena di fallback, poi
+    `common`, poi mostra la chiave. Le chiavi sono identificatori stabili (non
+    testo cinese: verificato nei bundle installati), ma il key set di riferimento
+    è il dizionario cinese: le lingue spedite sono tipizzate contro `zh` e
+    devono essere complete. `en` è richiesto e funge da fallback.
+    `it` non è built-in: il dizionario si può registrare sempre, ma la lingua
+    diventa selezionabile solo se un language pack chiama `addLanguage({id:'it'})`
+    (`dsh-locale-it` nel profilo `web`); il plugin non deve rivendicarla per non
+    collidere con il pack. `t(key, params)` interpola i segnaposto.
 
 ## Correzione del 12/11 — marker di consegna
 
@@ -155,6 +169,24 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 | preset agente registrato | sotto-sessioni, subagenti, job in background |
 | marcatura fork (`isSeeded` + cut) | permessi/impostazioni locali della cartella |
 
+## Internazionalizzazione (v0.2.0)
+
+- namespace `chatshifter`, dizionari dentro `lib/client.js`, 9 lingue: `zh`,
+  `en`, `ja`, `es`, `fr`, `de`, `ru`, `pt`, `it`.
+- `zh` è la baseline e `en` il fallback, come nel locale di DSH; il test
+  `every locale is complete against the Chinese baseline` verifica chiavi,
+  segnaposto e assenza di ZWSP/BOM.
+- I messaggi host non sono più in italiano: ogni rifiuto espone `code` stabile,
+  `message` inglese e `details` con i valori dei segnaposto. Il client traduce
+  il codice; un codice sconosciuto ricade sul `message`.
+- La voce di menu e i testi seguono il locale attivo; il menu si ricostruisce
+  grazie a `observe` su `ctx.locale`.
+- `it` diventa selezionabile solo se un language pack registra la lingua
+  (`dsh-locale-it` nel profilo `web`): il plugin registra solo il dizionario per
+  non collidere con il pack.
+- Verificato a video il 12/11: cambiando lingua dall'harness, menu, conferma ed
+  esito del plugin seguono il locale attivo.
+
 ## File del progetto
 
 | Percorso | Ruolo |
@@ -163,8 +195,8 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 | `lib/client.js` | browser: bundle a mano, contributo menu sessione, conferma, esito |
 | `cordis.patch.yml` | riga `insert` del bundle nel profilo (config `archiveSource`) |
 | `package.json` | bundle + `dsh.client` + export `./client` |
-| `tests/host.test.js` | 14 test host con persistenza/registry finti |
-| `tests/client.test.js` | 9 test del bundle browser (vm, `window.__ModuleLoader__`) |
+| `tests/host.test.js` | 15 test host con persistenza/registry finti |
+| `tests/client.test.js` | 13 test del bundle browser (vm, `window.__ModuleLoader__`), inclusi locale, chiavi usate e completezza dizionari |
 | `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura (preferendo una con watermark), sposta a freddo e a caldo, riapre la copia |
 | `scripts/repro-delivery.mjs` | riproduce il guasto dei marker di consegna su una sessione reale (diagnostica) |
 | `scripts/repair-delivery.mjs` | ripara una copia già corrotta ri-puntando i marker, con dry-run e `--apply` |

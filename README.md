@@ -11,7 +11,8 @@ Un plugin a due metà per [DeepSeek Harness](https://github.com/deepseek-ai/deep
   archivia l'originale;
 - **browser** (`lib/client.js`) — una voce «Sposta nel workspace…» nel menu
   contestuale della chat, con la scelta della destinazione, l'avviso esplicito
-  su cosa non viaggia e l'esito dell'operazione.
+  su cosa non viaggia e l'esito dell'operazione. La voce e i messaggi sono
+  tradotti in tutte le lingue di DSH più l'italiano.
 
 ## Cosa fa
 
@@ -41,6 +42,28 @@ Un plugin a due metà per [DeepSeek Harness](https://github.com/deepseek-ai/deep
 
 L'originale non viene toccato: la sua storia resta intatta e può essere
 ripristinata.
+
+## Lingue
+
+La UI del plugin è tradotta in tutte le lingue di DSH più l'italiano:
+
+| `zh` | `en` | `ja` | `es` | `fr` | `de` | `ru` | `pt` | `it` |
+|---|---|---|---|---|---|---|---|---|
+
+I dizionari stanno in `lib/client.js` sotto il namespace `chatshifter`. `zh` è
+la baseline: DSH tipizza e spedisce ogni lingua contro il key set cinese e
+richiede anche `en` come fallback, quindi ogni dizionario deve avere le stesse
+chiavi e gli stessi segnaposto (`{title}`, `{reason}`, …). Il test
+`every locale is complete against the Chinese baseline` lo verifica.
+
+L'italiano diventa selezionabile quando un language pack registra la lingua
+`it`: nel profilo `web` lo fa `dsh-locale-it`. Il plugin registra solo il
+dizionario `it`, non la definizione della lingua, così non entra in conflitto
+con il pack che la possiede.
+
+Gli errori dell'host non sono tradotti lato server: la risposta porta un codice
+stabile e i dettagli, e il client compone il messaggio nella lingua attiva. Un
+codice sconosciuto ricade sul `message` inglese dell'host.
 
 ## Installazione
 
@@ -73,6 +96,11 @@ Due rotte autenticate dal carrier della connessione (solo Peer owner):
 - `POST /api/chatshifter.move` — `{ sessionId, workspaceId? | targetPath?, keepOriginal? }`
   → `{ ok, sessionId, workspaceId, workspaceTitle, workspacePath, source, events, location, archived, archiveError? }`
 - `GET /api/chatshifter.info` — versione e configurazione della metà host.
+
+Gli errori rispondono `{ ok: false, error: { code, message, details? } }`:
+`code` è il contratto stabile che il client traduce, `message` è un fallback
+inglese per i consumatori API e `details` porta i valori dei segnaposto
+(`sessionId`, `path`, `reason`, …).
 
 ## Sviluppo
 

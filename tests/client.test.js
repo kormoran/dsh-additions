@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import vm from 'node:vm'
 
+/** Dictionaries from the most recently loaded bundle, reused by the fake locale. */
+let lastLocales
+
 /**
  * Load the hand-authored browser bundle the way the client module system
  * does: execute the script, capture the registration, and materialize the
@@ -28,18 +31,78 @@ function loadBundle(overrides = {}) {
     filename: 'lib/client.js',
   })
   assert.ok(registration, 'the bundle registers itself')
-  return { id: registration.id, exports: registration.factory() }
+  const exports = registration.factory()
+  lastLocales = exports.__locales
+  return { id: registration.id, exports }
+}
+
+/**
+ * Minimal locale service with the same lookup shape as DSH's: active locale,
+ * then English, then the key itself; `{name}` placeholders are interpolated.
+ * @param dictionaries - namespace dictionaries keyed by locale.
+ * @param active - initially active locale.
+ * @returns the service and a mutable `active` property.
+ */
+function createLocale(dictionaries, active = 'it') {
+  const registered = new Map()
+  const state = { active }
+  return {
+    get active() {
+      return state.active
+    },
+    set active(value) {
+      state.active = value
+    },
+    register(ns, localeOrDicts, dict) {
+      const pairs = typeof localeOrDicts === 'string' ? [[localeOrDicts, dict]] : Object.entries(localeOrDicts)
+      let map = registered.get(ns)
+      if (map === undefined) {
+        map = new Map()
+        registered.set(ns, map)
+      }
+      for (const [locale, entries] of pairs) map.set(locale, entries)
+      return () => {}
+    },
+    bind(ns) {
+      return (key, params) => {
+        let template
+        for (const locale of [state.active, 'en']) {
+          const value = registered.get(ns)?.get(locale)?.[key]
+          if (value !== undefined) {
+            template = value
+            break
+          }
+        }
+        if (template === undefined) template = key
+        if (params === undefined) return template
+        return template.replace(/\{(\w+)\}/g, (match, name) =>
+          name in params ? String(params[name]) : match,
+        )
+      }
+    },
+    getLocale() {
+      return { active: state.active, locales: [], revision: 0 }
+    },
+    getSnapshot() {
+      return this.getLocale()
+    },
+    subscribe() {
+      return () => {}
+    },
+  }
 }
 
 /**
  * @param workspaces - workspace views served to the menu.
- * @param archives - archived session ids.
+ * @param options - locale, phase, and Remote overrides.
  * @returns a client-context stand-in with recording services.
  */
 function createClient(workspaces, options = {}) {
   const state = { contributions: [], notices: [], refreshes: 0, unregisters: 0 }
+  const locale = options.locale ?? createLocale(lastLocales, options.activeLocale ?? 'it')
   const ctx = {
     effect: (factory) => factory(),
+    locale,
     contextMenus: {
       register: (contribution) => {
         state.contributions.push(contribution)
@@ -59,7 +122,7 @@ function createClient(workspaces, options = {}) {
     },
     remote: options.remote ?? {},
   }
-  return { ctx, state }
+  return { ctx, state, locale }
 }
 
 const session = { sessionId: 'session-source', displayTitle: 'La mia chat' }
@@ -82,7 +145,7 @@ function okFetch(body, options = {}) {
 test('the bundle announces itself with the package id and injected services', () => {
   const { id, exports } = loadBundle()
   assert.equal(id, 'dsh-chatshifter')
-  assert.deepEqual([...exports.inject], ['contextMenus', 'workspaces', 'sessions', 'remote'])
+  assert.deepEqual([...exports.inject], ['contextMenus', 'workspaces', 'sessions', 'remote', 'locale'])
   assert.equal(typeof exports.apply, 'function')
   assert.equal(exports.name, 'dsh-chatshifter')
 })
@@ -134,6 +197,7 @@ test('a confirmed move posts the captured session and refreshes the list', async
 
   const last = state.notices.at(-1)
   assert.equal(last.success, true)
+  assert.match(last.text, /«La mia chat»/u)
   assert.match(last.text, /session-clone/u)
   assert.match(last.text, /archiviato/u)
 })
@@ -163,7 +227,7 @@ test('the warning follows the host archive setting', async () => {
 
 test('a host refusal becomes a visible failure notice', async () => {
   const fetch = async () =>
-    new Response(JSON.stringify({ ok: false, error: { code: 'same-workspace', message: 'La chat è già qui.' } }), {
+    new Response(JSON.stringify({ ok: false, error: { code: 'same-workspace', message: 'The chat is already here.' } }), {
       status: 409,
       headers: { 'content-type': 'application/json' },
     })
@@ -174,7 +238,21 @@ test('a host refusal becomes a visible failure notice', async () => {
   await state.contributions[0].resolve(session)[0].children[1].run()
   const last = state.notices.at(-1)
   assert.equal(last.success, false)
-  assert.match(last.text, /La chat è già qui\./u)
+  assert.match(last.text, /La chat è già in questo workspace\./u)
+})
+
+test('an unknown host code falls back to the host message', async () => {
+  const fetch = async () =>
+    new Response(
+      JSON.stringify({ ok: false, error: { code: 'future-code', message: 'Server says no.' } }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    )
+  const { exports } = loadBundle({ confirm: () => true, fetch })
+  const { ctx, state } = createClient([alpha, beta])
+  exports.apply(ctx)
+
+  await state.contributions[0].resolve(session)[0].children[1].run()
+  assert.match(state.notices.at(-1).text, /Server says no\./u)
 })
 
 test('another folder uses the picker and sends a target path', async () => {
@@ -213,4 +291,54 @@ test('a workspace list still loading yields a disabled action', () => {
   const actions = state.contributions[0].resolve(session)
   assert.equal(actions[0].disabled, true)
   assert.equal(actions[0].children, undefined)
+})
+
+test('the menu follows the active locale', () => {
+  const { exports } = loadBundle()
+  const { ctx, state, locale } = createClient([alpha, beta], { activeLocale: 'en' })
+  exports.apply(ctx)
+
+  const english = state.contributions[0].resolve(session)
+  assert.equal(english[0].label, 'Move to workspace…')
+  assert.equal(english[0].children[0].label, 'Alpha (current)')
+  assert.equal(english[0].children[2].label, 'Other folder…')
+
+  locale.active = 'ja'
+  const japanese = state.contributions[0].resolve(session)
+  assert.equal(japanese[0].label, 'ワークスペースへ移動…')
+  assert.equal(japanese[0].children[0].label, 'Alpha（現在）')
+
+  locale.active = 'it'
+  assert.equal(state.contributions[0].resolve(session)[0].label, 'Sposta nel workspace…')
+})
+
+test('every key the bundle translates exists in the baseline', () => {
+  const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const { exports } = loadBundle()
+  const keys = new Set([...source.matchAll(/\bt\('([^']+)'/g)].map((match) => match[1]))
+  assert.ok(keys.size > 20, `the bundle translates ${keys.size} literal keys`)
+  for (const key of keys) {
+    assert.ok(Object.hasOwn(exports.__locales.zh, key), `baseline has ${key}`)
+  }
+})
+
+test('every locale is complete against the Chinese baseline', () => {
+  const { exports } = loadBundle()
+  const locales = exports.__locales
+  assert.deepEqual(Object.keys(locales), ['zh', 'en', 'ja', 'es', 'fr', 'de', 'ru', 'pt', 'it'])
+
+  const baseline = Object.keys(locales.zh)
+  assert.ok(baseline.length > 30)
+  const placeholders = (text) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort()
+
+  for (const [locale, dictionary] of Object.entries(locales)) {
+    assert.deepEqual(Object.keys(dictionary), baseline, `${locale} key set`)
+    for (const key of baseline) {
+      const value = dictionary[key]
+      assert.equal(typeof value, 'string', `${locale}.${key} is a string`)
+      assert.ok(value.trim().length > 0, `${locale}.${key} is not empty`)
+      assert.deepEqual(placeholders(value), placeholders(locales.zh[key]), `${locale}.${key} placeholders`)
+      assert.ok(!value.includes('\u200b') && !value.includes('\ufeff'), `${locale}.${key} has no invisible markers`)
+    }
+  }
 })
