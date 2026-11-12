@@ -18,7 +18,13 @@ Un plugin a due metà per [DeepSeek Harness](https://github.com/deepseek-ai/deep
 1. Legge la sessione sorgente: dalla memoria se è viva (`ctx.sessions`),
    altrimenti dal log persistito con sola lettura (`ctx.sessionPersistence`).
 2. Scrive un **nuovo** log nella cartella di progetto del workspace di
-   destinazione, con lo stesso formato e gli stessi eventi.
+   destinazione, con lo stesso formato e gli stessi eventi. I marker di consegna
+   del log (`session-log-deepseek/delivery-accepted`) vengono ri-puntati alla
+   nuova identità: il formato rifiuta un marker della generazione corrente che
+   nomina un'altra sessione, e senza questa riscrittura la copia risulta
+   corrotta in lettura (`current-generation delivery marker names the wrong
+   Session`). I marker dentro il prefisso ereditato di un fork restano invece
+   intestati all'antenato, come per qualsiasi fork.
 3. Registra la nuova sessione nel workspace (`Workspace.attachSession`), così
    compare raggruppata sotto quel workspace.
 4. Archivia l'originale (`WorkspaceRegistry.archiveSession`) — nascosto, non

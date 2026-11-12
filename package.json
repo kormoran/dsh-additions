@@ -1,6 +1,6 @@
 {
   "name": "dsh-chatshifter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Move a DeepSeek Harness chat to another workspace, carrying its history with it.",
   "type": "module",

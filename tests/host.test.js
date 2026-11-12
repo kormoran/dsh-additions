@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { MOVE_PATH, INFO_PATH, MoveError, apply, buildHeader, performMove } from '../lib/index.js'
+import { MOVE_PATH, INFO_PATH, MoveError, apply, buildHeader, performMove, reidentifyDeliveryMarkers } from '../lib/index.js'
 
 /**
  * In-memory stand-in for the persistence seam. It enforces the same
@@ -467,6 +467,51 @@ test('the HTTP routes answer with JSON and map expected refusals', async () => {
   } finally {
     await parts.cleanup()
   }
+})
+
+test('a moved chat re-points its own delivery markers at the clone', async () => {
+  const delivery = (seq, sessionId) => ({
+    type: 'session-log-deepseek/delivery-accepted',
+    seq,
+    time: 1_700_000_000_000 + seq,
+    data: { sessionId, sessionFormatVersion: 4, throughSeq: seq - 1 },
+  })
+  const parts = await harness({ live: { events: [event(0), delivery(1, 'session-live'), event(2)] } })
+  try {
+    const sourceEvents = parts.live.get('session-live').snapshotEvents()
+    const result = await performMove(parts.ctx, {}, {
+      sessionId: 'session-live',
+      workspaceId: parts.targetWorkspace.id,
+    })
+
+    const record = parts.persistence.sessions.get(result.sessionId)
+    assert.equal(record.events[1].data.sessionId, result.sessionId)
+    assert.equal(record.events[1].data.throughSeq, 0, 'the watermark coordinates are preserved')
+    assert.deepEqual(record.events[0], sourceEvents[0], 'ordinary events are appended unchanged')
+    assert.equal(sourceEvents[1].data.sessionId, 'session-live', 'the source snapshot is not mutated')
+  } finally {
+    await parts.cleanup()
+  }
+})
+
+test('delivery markers inside an inherited prefix keep naming the ancestor', () => {
+  const inherited = {
+    type: 'session-log-deepseek/delivery-accepted',
+    seq: 1,
+    data: { sessionId: 'session-parent', sessionFormatVersion: 4, throughSeq: 0 },
+  }
+  const own = {
+    type: 'session-log-deepseek/delivery-accepted',
+    seq: 4,
+    data: { sessionId: 'session-live', sessionFormatVersion: 4, throughSeq: 3 },
+  }
+  const events = [event(0), inherited, event(2), { type: 'session/end-seed', seq: 3, data: { inherited: true } }, own]
+
+  const rewritten = reidentifyDeliveryMarkers(events, 'session-clone', 3)
+  assert.equal(rewritten[1], inherited, 'the inherited marker object is reused as-is')
+  assert.equal(rewritten[4].data.sessionId, 'session-clone')
+  assert.equal(rewritten[4].data.throughSeq, 3)
+  assert.equal(events[4].data.sessionId, 'session-live', 'the source event is not mutated')
 })
 
 test('buildHeader keeps the logical format, preserves the fork cut, and carries the preset', () => {

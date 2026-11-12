@@ -11,7 +11,7 @@ workspace a una chat esistente.
 
 ## Stato: plugin vero sviluppato, installato e attivo
 
-`dsh-chatshifter` v0.1.0 è nel profilo `web` (bundle `link:` a questo repo) e la
+`dsh-chatshifter` v0.1.1 è nel profilo `web` (bundle `link:` a questo repo) e la
 sua riga host è `active`. Il vecchio probe `dsh-session-mover-probe` è stato
 rimosso dal profilo (resta una junction orfana in
 `~/.dsh/profiles/web/node_modules/`, non più referenziata da `package.json`).
@@ -21,9 +21,11 @@ Verificato:
 ```text
 host  GET  /api/chatshifter.info → 200 {"ok":true,...,"archiveSource":true}   (cookie owner reale)
 client bundle servito: /plugins/??dsh-chatshifter/client.js&rev=<rev> → 200 (contenuto del repo)
-test:  21/21 unitari verdi
+test:  23/23 unitari verdi
 integrazione con backend JSONL reale: spostamento a freddo + a caldo (fork-derived) riusciti,
          copia riaperta con la stessa storia e lo stesso cut
+marker di consegna: la copia di una chat con 51 `delivery-accepted` reali si riapre
+         (prima falliva con `current-generation delivery marker names the wrong Session`)
 ```
 
 Non ancora verificato a video (serve un click dell'utente): comparsa della voce
@@ -99,6 +101,50 @@ sottomento «Sposta nel workspace…», avviso esplicito via `window.confirm`,
    non possono aprire pipe). Usare `node --test --test-isolation=none tests/`.
 10. **`mtimeMs`/`ctimeMs` / `size` del file client**: la revisione cambia anche
     solo toccando il file; nessun hash del contenuto.
+11. **I marker `session-log-deepseek/delivery-accepted` appartengono alla sessione**
+    Il formato rifiuta in lettura un marker della generazione corrente il cui
+    `data.sessionId` non è l'id dell'header: `current-generation delivery marker
+    names the wrong Session`. La copia deve quindi ri-puntare alla nuova identità
+    i marker con `seq >= inheritedEventCount`; quelli dentro il prefisso ereditato
+    di un fork restano intestati all'antenato (eccezione prevista dal formato).
+    Il primo spostamento reale creava una copia illeggibile: 170 marker su 1321
+    eventi nominavano ancora la sorgente. Il watermark `throughSeq` non cambia.
+
+## Correzione del 12/11 — marker di consegna
+
+Il primo test in GUI ha spostato davvero una chat (sorgente
+`session-72962ad1…`, da `dsh-chatshifter` a `default-workspace`) e la GUI non è
+riuscita a caricarne la cronologia:
+
+```text
+stored session "session-fb1907a8…" is corrupt: …
+SessionFormatError: current-generation delivery marker names the wrong Session
+```
+
+Causa: il clone copiava gli eventi alla lettera, compresi i 170 watermark
+`session-log-deepseek/delivery-accepted` che nominavano la sorgente. Il formato
+v4 accetta un marker "straniero" solo dentro il prefisso ereditato di un fork
+(`seq < inheritedEventCount`); in una sessione non-seeded ogni marker deve
+nominare l'header.
+
+Correzione (v0.1.1):
+
+- `reidentifyDeliveryMarkers(events, sessionId, inheritedEventCount)` in
+  `lib/index.js`: copia il marker solo quando cambia, azzera `data.sessionId`
+  alla nuova identità e lascia intatti gli eventi normali e il prefisso ereditato;
+- `writeClone` appende il risultato invece degli eventi grezzi;
+- test: 2 nuovi casi (marker proprio ri-puntato senza mutare la sorgente; marker
+  ereditato che resta all'antenato) e l'integrazione ora sceglie una sessione
+  reale **con** watermark e verifica che la copia li possieda;
+- `scripts/repair-delivery.mjs <sessionId> [--apply]`: ripara in place una copia
+  già corrotta, riscrivendo il log con il backend JSONL ufficiale (dry-run di
+  default). La copia rotta `session-fb1907a8…` è stata riparata con questo
+  strumento: 1321 eventi, 170 marker ri-puntati, riaperti con un contesto
+  fresco. Nel profilo live la voce host è stata disabilitata e riabilitata per
+  ricaricare il codice 0.1.1.
+
+Riproduzione: `scripts/repro-delivery.mjs` sposta una sessione reale con marker e
+riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatError`.
 
 ## Cosa viaggia e cosa no
 
@@ -117,9 +163,11 @@ sottomento «Sposta nel workspace…», avviso esplicito via `window.confirm`,
 | `lib/client.js` | browser: bundle a mano, contributo menu sessione, conferma, esito |
 | `cordis.patch.yml` | riga `insert` del bundle nel profilo (config `archiveSource`) |
 | `package.json` | bundle + `dsh.client` + export `./client` |
-| `tests/host.test.js` | 12 test host con persistenza/registry finti |
+| `tests/host.test.js` | 14 test host con persistenza/registry finti |
 | `tests/client.test.js` | 9 test del bundle browser (vm, `window.__ModuleLoader__`) |
-| `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura, sposta a freddo e a caldo, riapre la copia |
+| `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura (preferendo una con watermark), sposta a freddo e a caldo, riapre la copia |
+| `scripts/repro-delivery.mjs` | riproduce il guasto dei marker di consegna su una sessione reale (diagnostica) |
+| `scripts/repair-delivery.mjs` | ripara una copia già corrotta ri-puntando i marker, con dry-run e `--apply` |
 | `probe-report.json` | reperto storico del POC (non più usato) |
 | `PROJECT_STATE.md` | questo file |
 
@@ -143,7 +191,9 @@ pagina Plugin o riavvio DSH); per il client vedi la scoperta 6.
 
 ## Problemi aperti / prossimi passi
 
-1. **Smoke test in GUI** — ricaricare la pagina e provare il menu `⋯` su una
+1. **Smoke test in GUI** — il primo giro ha trovato il bug dei marker di consegna
+   (corretto in v0.1.1) e la copia rotta è stata riparata; serve un secondo giro
+   per la verifica a video. Ricaricare la pagina e provare il menu `⋯` su una
    chat: la voce deve comparire tra fork e copia-id; deve funzionare la conferma,
    lo spostamento, il refresh della lista e la scomparsa (archiviazione)
    dell'originale. Verificare anche che la nuova riga compaia subito nel

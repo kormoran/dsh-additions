@@ -97,12 +97,31 @@ const registry = {
 const { performMove } = await import('../lib/index.js')
 const ctx = { sessions: writer.sessions, sessionPersistence: persistence, workspaceRegistry: registry, logger: { warn() {} } }
 
-/** Choose the smallest current-format real session with content. */
+const DELIVERY = 'session-log-deepseek/delivery-accepted'
+
+/**
+ * Choose the smallest current-format real session with content, preferring one
+ * that carries its own delivery-accepted markers: those markers are the
+ * regression this run exists to catch.
+ */
 async function pickRealSession() {
   const snapshots = await reader.sessionPersistence.list()
   const current = snapshots.filter((snapshot) => snapshot.formatStatus === 'current' && snapshot.location !== undefined)
   current.sort((left, right) => (left.sizeBytes ?? 0) - (right.sizeBytes ?? 0))
   if (current.length === 0) throw new Error('no current-format real session to read')
+  for (const snapshot of current.slice(0, 12)) {
+    try {
+      const handle = await reader.sessionPersistence.open(snapshot.header.id, 'read')
+      try {
+        const { events } = await handle.read(0)
+        if (events.some((event) => event.type === DELIVERY && event.data?.sessionId === snapshot.header.id)) return snapshot
+      } finally {
+        await handle.close()
+      }
+    } catch {
+      // An unreadable session is not a usable source; keep looking.
+    }
+  }
   return current[0]
 }
 
@@ -136,6 +155,7 @@ assert.ok(projectDirectory.startsWith('--'), `project directory is a normalized 
 assert.ok(/target/u.test(projectDirectory), `project directory names the target workspace: ${projectDirectory}`)
 
 const coldHandle = await writer.sessionPersistence.open(cold.sessionId, 'read')
+const coldInherited = coldHandle.inheritedEventCount ?? 0
 const cloneEvents = (await coldHandle.read(0)).events
 await coldHandle.close()
 assert.equal(cloneEvents.length, sourceEvents.length)
@@ -145,6 +165,20 @@ assert.deepEqual(
   'the clone keeps the source sequence numbers',
 )
 assert.deepEqual(cloneEvents.map((event) => event.type), sourceEvents.map((event) => event.type))
+
+const sourceDeliveries = sourceEvents.filter((event) => event.type === DELIVERY)
+const sourceOwn = sourceDeliveries.filter((event) => event.data?.sessionId === sourceHeader.id)
+if (sourceOwn.length > 0) {
+  const cloneOwn = cloneEvents.filter((event) => event.type === DELIVERY && event.seq >= coldInherited)
+  assert.equal(cloneOwn.length, sourceOwn.length, 'every owned delivery marker is copied')
+  assert.ok(
+    cloneOwn.every((event) => event.data.sessionId === cold.sessionId),
+    'the clone owns its delivery markers instead of the source',
+  )
+  console.log(`delivery ownership ok: ${cloneOwn.length} markers re-pointed at ${cold.sessionId}`)
+} else {
+  console.log('delivery ownership: no real source with owned delivery markers (case not exercised)')
+}
 console.log(`cold move ok: ${cold.sessionId} -> ${coldStat.location.path}`)
 
 // ── case 2: live source read from the session store ─────────────────────────
