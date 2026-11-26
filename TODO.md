@@ -1,6 +1,6 @@
 # TODO — verso la 1.0.0
 
-Backlog operativo per la 1.0.0 di `dsh-chatshifter`.
+Backlog operativo per la 1.0.0 di `dsh-additions` (ex `dsh-chatshifter`).
 
 Punto di partenza: **0.2.0** (commit `8ea2573`, tag `v0.2.0`, 28/28 test,
 tarball in `dist/`). Obiettivo: release stabile, sicura e distribuibile.
@@ -11,6 +11,49 @@ test in un profilo pulito, poi promuovere a `1.0.0` (o direttamente 1.0 se il
 tempo basta).
 
 ## P0 — bloccanti (dati e compatibilità)
+
+- [x] **Metà browser sull'API client corrente**
+  - [x] DSH 0.2.1-rc.2 non espone `ctx.contextMenus`: la voce di spostamento è
+        ora registrata in `sidebar.workspaces.session.menu.item` con
+        `ctx.slots.inject`/`ctx.slots.register` e il flusso è un dialog in
+        `shell.overlay` (0.4.0, 11 test del bundle).
+  - [x] **Pannello destro «Workspace»**: tab registrata su
+        `ctx.sidebarRightTabs.register({id, kind, priority, title, guide})` con
+        corpo in `sidebar.right.pane.tab` e chip in `sidebar.right.pane.tab.title`;
+        consuma `GET /api/additions.workspace-stats` (0.5.0–0.5.2).
+  - [x] Verifica a video (25/11, DSH 0.2.1-rc.2): voce «Sposta nel workspace…»
+        funzionante, chat spostata davvero, `+` → guida → capsula «Workspace» →
+        lista → «Dettagli» con le statistiche. Due trappole trovate e corrette:
+        `MenuItemButton` vuole `onSelect` (0.5.1) e una tab senza voce `guide` è
+        invisibile (0.5.2).
+  - [ ] `/quit` ancora non provato a video (interrompe il server, va fatto
+        quando non serve la sessione).
+
+- [ ] **Segnali sonori (0.6.0)**
+  - [ ] Verifica a video: `ding` alla fine di un turno e «uh oh» su una richiesta
+        di permesso; controllare che il primo segnale dopo il caricamento della
+        pagina possa restare muto (autoplay) e che dal secondo in poi suoni.
+  - [ ] Provare la sostituzione: puntare `sounds.ding` a un file esterno e
+        verificare l'header `x-additions-sound-source: custom`.
+  - [ ] Valutare `sounds.onlyActive: true` (oggi suona anche per i subagenti, che
+        possono moltiplicare i ding durante workflow) e un breve debounce tra due
+        ding ravvicinati.
+
+- [ ] **`/quit` — comportamento con lavoro in corso**
+  - [ ] Decidere se rifiutare quando un turno è aperto o job sono attivi, o
+        documentare che li interrompe (oggi: li interrompe, il log resta
+        rileggibile al resume).
+  - [ ] Verifica a video del comando dopo il riavvio di `dsh web`.
+
+- [x] **Rinomina del repository**
+  - [x] Repository GitHub rinominato `kormoran/dsh-chatshifter` →
+        `kormoran/dsh-additions` (26/11), remote locale aggiornato e
+        `package.json`/README allineati in 0.5.3. La cartella locale resta
+        `I:\src\dsh-chatshifter` (ci puntano il workspace DSH e la spec `file:`
+        del profilo).
+  - [x] Nome npm: `dsh-additions` è libero (404 sul registry, 24/11); scartati
+        `dsh-commander` (occupato da `yusi5587`) e `dsh-toys` (troppo vicino a
+        `dsh-toy`, plugin esistente).
 
 - [ ] **Validare la copia prima di archiviare l'originale**
   - [ ] Dopo `writeClone`, riaprire la nuova sessione in sola lettura e leggere tutti gli eventi.

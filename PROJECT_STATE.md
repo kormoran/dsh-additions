@@ -1,18 +1,67 @@
-# PROJECT_STATE — dsh-chatshifter
+# PROJECT_STATE — dsh-additions
 
-Memoria permanente del progetto. Aggiornato: **2026-11-12**, release **0.2.0**
-(commit `8ea2573`, tag `v0.2.0`). Il backlog per la 1.0.0 è in [TODO.md](TODO.md).
+Memoria permanente del progetto. Aggiornato: **2026-11-26**, versione **0.6.0**.
+Pacchetto e repository GitHub si chiamano entrambi `dsh-additions` (il repository
+è stato rinominato il 26/11; la cartella locale resta `I:\src\dsh-chatshifter`).
+Il backlog per la 1.0.0 è in [TODO.md](TODO.md).
 
 ## Obiettivo
 
-Un plugin per DeepSeek Harness che **sposti una chat in un altro workspace**,
-portandosi dietro contesto e memorie — o, equivalentemente, assegni un nuovo
-workspace a una chat esistente.
+Comandi e pannelli per DeepSeek Harness, ospitati in un solo plugin: `/quit`
+ferma il processo dal composer, lo spostamento di una chat in un altro workspace
+resta la funzione storica nata come `dsh-chatshifter`, e le statistiche dei
+workspace (dimensione, directory, file, righe di codice e di documentazione)
+alimentano il pannello destro «Workspace».
 
-## Stato: 0.2.0 finalizzata, installata e pacchettizzata
+## Stato: 0.6.0 installata — segnali sonori, pannello «Workspace», /quit
 
-`dsh-chatshifter` v0.2.0 è nel profilo `web` (bundle `link:` a questo repo) e la
-sua riga host è `active`. Il profilo è pulito: rimossi la junction orfana
+`dsh-additions` v0.6.0 è nel profilo `web` come **tarball** (`file:` a
+`dist/dsh-additions-0.6.0.tgz`), la riga `additions` del loader compone
+(`archiveSource`, `quit`, `stats`, `sounds`).
+
+Verificato il 26/11:
+
+```text
+test:     60/60 unitari verdi (15 host, 19 bundle browser, 9 /quit, 9 statistiche, 8 suoni)
+pacchetto: dist/dsh-additions-0.6.0.tgz — 12 file (include i due WAV), 111,7 kB,
+           sha256 8CDAD98E…F1504CBB
+profilo:   dsh-additions@0.6.0, copia reale con assets/ding.wav e assets/uh-oh.wav
+bundle:    tab workspace-info + voce guida + watcher dei segnali in shell.overlay
+API client: ctx.slots (menù in sidebar.workspaces.session.menu.item, dialog in
+           shell.overlay); tab via ctx.inject(['sidebarRightTabs'])
+suoni:     letti da uiSession.sessionStatus — running true→false = ding,
+           pendingInteraction.kind 'approval' = uh oh; rotta /api/additions.sound
+GUI (a video, DSH 0.2.1-rc.2): voce «Sposta nel workspace…» funzionante, chat
+           spostata davvero; `+` → guida → «Workspace» → lista → «Dettagli»
+```
+
+I segnali sonori **non sono ancora provati a video**: richiedono il riavvio (o il
+toggle) che ricarica il bundle 0.6.0.
+
+Verificato a video il 25/11: il dialog di spostamento funziona end-to-end (la chat
+cambia workspace e la copia si riapre con la storia) e il pannello destro mostra
+lista e statistiche del workspace scelto. Resta non provato a video solo `/quit`
+(l'interruzione del server, per ovvie ragioni di comodo).
+
+## Stato storico: 0.4.0 (API client corrente e motore statistiche)
+
+La 0.4.0 ha portato la metà browser da `ctx.contextMenus` a `ctx.slots` (voce di
+spostamento con dialog) e ha aggiunto il motore delle statistiche
+(`lib/workspace-stats.js`) con la rotta `GET /api/additions.workspace-stats`.
+Tarball `dist/dsh-additions-0.4.0.tgz`, `A37E7DF6…`; 44 test.
+
+## Stato storico: 0.3.0 (rinomina e /quit)
+
+La 0.3.0 è stata la rinomina `dsh-chatshifter` → `dsh-commander` (abbandonato
+perché il nome npm era occupato) → `dsh-additions`, più il comando `/quit`
+(SIGINT dopo `delayMs` con watchdog `process.exit(0)` dopo `graceMs`). Tarball
+`dist/dsh-additions-0.3.0.tgz`, 8 file, `F65EA301…`; 37 test verdi.
+
+## Stato storico: 0.2.0 (dsh-chatshifter)
+
+`dsh-chatshifter` v0.2.0 è nel profilo `web` come **tarball** (`file:` a
+`dist/dsh-chatshifter-0.2.0.tgz`, non più `link:` al checkout) e la sua riga host
+è `active`. Il profilo è pulito: rimossi la junction orfana
 `dsh-session-mover-probe` e il link rotto `@local/dsh-locale-it`, e la vecchia
 cartella del probe nel workspace non esiste più. Il pacchetto è pronto per la
 distribuzione: tarball verificato in `dist/`. Commit `8ea2573`, tag `v0.2.0`;
@@ -22,7 +71,7 @@ Verificato:
 
 ```text
 host  GET  /api/chatshifter.info → 200 {"ok":true,...,"archiveSource":true}   (cookie owner reale)
-client bundle servito: /plugins/??dsh-chatshifter/client.js&rev=<rev> → 200 (contenuto del repo)
+client bundle servito: /plugins/??dsh-chatshifter/client.js&rev=<rev> → 200 (contenuto del pacchetto)
 test:  28/28 unitari verdi
 integrazione con backend JSONL reale: spostamento a freddo + a caldo (fork-derived) riusciti,
          copia riaperta con la stessa storia e lo stesso cut
@@ -30,13 +79,35 @@ marker di consegna: la copia di una chat con marker `delivery-accepted` reali si
          (prima falliva con `current-generation delivery marker names the wrong Session`)
 i18n: 9 lingue complete contro la baseline `zh` (test di completezza e segnaposto)
 profilo: pulito (nessun link orfano in `~/.dsh/profiles/web/node_modules`)
-pacchetto: dist/dsh-chatshifter-0.2.0.tgz — 7 file, 21,9 kB, sha256 0467ACD9…
+pacchetto: dist/dsh-chatshifter-0.2.0.tgz — 7 file, 22,6 kB, sha256 A77C5F97…
 release: commit 8ea2573, tag v0.2.0 (non pubblicata)
 ```
 
 Verificato anche a video il 12/11: la chat spostata e riparata si apre con la
 cronologia, le chat si spostano davvero da un workspace all'altro e la UI del
 plugin segue la lingua scelta nelle impostazioni dell'harness.
+
+## Aggiornamento del 24/11 — test su Node 24 e bundle da tarball
+
+Due correzioni emerse usando il plugin su Node 24 / DSH 0.2.1-rc.2:
+
+1. **Comando di test** — `npm test` e il README usavano
+   `node --test --test-isolation=none tests/`. Su Node 24 l'argomento posizionale
+   non accetta più una directory (`ERR_UNSUPPORTED_DIR_IMPORT`). Ora
+   `package.json` usa `node --test --test-isolation=none "tests/*.test.js"`: il
+   pattern è espanso da Node (≥ 22.8, da cui esiste `--test-isolation`), quindi
+   il comando è identico in PowerShell, cmd e POSIX. Verificato: `npm test` →
+   28/28.
+2. **Bundle nel profilo** — il profilo `web` aveva `link:I:/src/dsh-chatshifter`,
+   cioè un symlink al checkout, non un pacchetto. Ora è installato dal tarball
+   (`file:I:/src/dsh-chatshifter/dist/dsh-chatshifter-0.2.0.tgz`): in
+   `node_modules/dsh-chatshifter` c'è una copia reale dei 7 file pubblicati.
+   Verificato: il modulo host importato dalla copia espone `name`/`inject` e
+   `--dump-config` compone la riga `chatshifter` (`archiveSource: true`).
+   Prezzo: aggiornare il codice richiede `npm pack` + reinstallazione, e la spec
+   `file:` punta al tarball su disco.
+3. Una voce nuova (o reinstallata) entra nel grafo solo al **riavvio** di
+   `dsh web`: il server legge i bundle del profilo al boot, non a ogni richiesta.
 
 ## Cosa è finalizzato
 
@@ -116,7 +187,12 @@ sottomento «Sposta nel workspace…», avviso esplicito via `window.confirm`,
 8. **Ordine del menu sessione** (ui-workspace): pin 100, rename 200, fork 300,
    id 450 (con separatore), archive 600. La nostra voce è a 400.
 9. **`node --test` sotto sandbox DSH fallisce** (`spawn EPERM`: i child process
-   non possono aprire pipe). Usare `node --test --test-isolation=none tests/`.
+   non possono aprire pipe). Usare `npm test`, cioè
+   `node --test --test-isolation=none "tests/*.test.js"`. Il pattern è espanso
+   da Node (≥ 22.8, dove esiste `--test-isolation`), non dalla shell; passare la
+   cartella (`tests/`) funzionava fino a Node 22 ma su Node 24 dà
+   `ERR_UNSUPPORTED_DIR_IMPORT`, perché l'argomento posizionale non accetta più
+   directory.
 10. **`mtimeMs`/`ctimeMs` / `size` del file client**: la revisione cambia anche
     solo toccando il file; nessun hash del contenuto.
 11. **I marker `session-log-deepseek/delivery-accepted` appartengono alla sessione**
@@ -139,6 +215,23 @@ sottomento «Sposta nel workspace…», avviso esplicito via `window.confirm`,
     diventa selezionabile solo se un language pack chiama `addLanguage({id:'it'})`
     (`dsh-locale-it` nel profilo `web`); il plugin non deve rivendicarla per non
     collidere con il pack. `t(key, params)` interpola i segnaposto.
+13. **`MenuItemButton` parla `onSelect`, non `onClick`** (verificato il 25/11
+    sulle righe di `dsh-client-ui-workspace`: `onSelect: () => {
+    setMenuOpen(false); … }`). Una riga di menu agganciata a `onClick` viene
+    renderizzata normalmente, con `t` e le props iniettate al loro posto, ma il
+    gestore non viene **mai** invocato: nessun errore in console, il menu resta
+    aperto, il click sembra morto. È il bug della 0.4.0/0.5.0, corretto in 0.5.1
+    con due test di regressione che fissano il contratto del primitivo. Nota:
+    `Button` usa invece `onClick`; `Modal` usa `open`/`onClose`/`children`.
+14. **Una tab del pannello destro esiste solo se dichiara una voce `guide`**
+    Il `+` del dock apre la tab *guida* (`GUIDE_KIND`), e la guida elenca i
+    `definition.guide` di ogni tipo registrato: un tipo senza voci `guide` è
+    registrato ma **irraggiungibile** dalla UI, e va aperto da `openTab(kind)`
+    (come fa `ui-schedule` dal suo header). La definition è
+    `{ id, kind, priority, title, guide: [{ id, order, title, description, icon? }] }`,
+    con `icon` opzionale (la guida ripiega su `CubeGlyph`). Il corpo si registra
+    nello slot `sidebar.right.pane.tab` con `key = definition.id` (non `kind`), e
+    il chip in `sidebar.right.pane.tab.title` con la stessa `key`.
 
 ## Correzione del 12/11 — marker di consegna
 
@@ -209,33 +302,50 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
   `publishConfig.access: public`, `files` whitelist, export `./cordis.patch.yml`
   e `dsh.client.inject` del locale.
 - `LICENSE` MIT e `CHANGELOG.md` (0.1.0 → 0.1.1 → 0.2.0).
-- `dist/dsh-chatshifter-0.2.0.tgz`: 7 file (lib, cordis.patch.yml, README,
-  LICENSE, CHANGELOG, package.json), 21,9 kB, SHA-256
-  `0467ACD92DA401C9398133060930669C6B2148F2910307D783BE616F40A86C12`.
-  Il tarball è stato estratto e il modulo host importato con successo.
-- Il nome npm `dsh-chatshifter` è libero (404 sul registry); il repo GitHub è
-  privato, quindi l'installazione `github:` richiede credenziali o la
-  pubblicazione del repo.
+- `dist/dsh-additions-0.3.0.tgz`: 8 file (lib/index.js, lib/client.js,
+  lib/quit.js, cordis.patch.yml, README, LICENSE, CHANGELOG, package.json),
+  26,6 kB, SHA-256
+  `F65EA301AB5F97E1E48EA9D557729B3B3B87FFE3F71BA9B94D033B8398E3D337`.
+- `dist/dsh-chatshifter-0.2.0.tgz`: il tarball storico del nome precedente
+  (22,6 kB, `A77C5F97…`), non più installato nel profilo.
+- Il nome npm `dsh-commander` è **occupato** da un plugin di un altro autore
+  (`yusi5587`, versioni 0.1.0–0.1.4, pubblicate ad agosto): per questo il progetto
+  è passato a `dsh-additions`, che risulta **libero** (404 sul registry,
+  verificato il 24/11). Attenzione solo all'accostamento con `dsh-toy` (nome
+  riservato su npm e plugin `c3ll256/dsh-toy` con ~80 stelle): non usare
+  `dsh-toys`. `dsh-chatshifter` risultava pure libero. Il repo GitHub è privato,
+  quindi l'installazione `github:` richiede credenziali o la pubblicazione del
+  repo.
 - Canali pronti ma **non pubblicati**: tarball (`dsh plugin add <file>.tgz`),
-  npm (`npm publish`), GitHub (`dsh plugin add github:kormoran/dsh-chatshifter`).
+  npm (`npm publish`), GitHub (`dsh plugin add github:kormoran/dsh-additions`).
+  Il repository è stato rinominato in `dsh-additions` il 26/11 (redirect attivo
+  dal vecchio nome); il remote locale è già `github.com/kormoran/dsh-additions`.
   La scelta del canale e la pubblicazione sono in [TODO.md](TODO.md).
 
 ## File del progetto
 
 | Percorso | Ruolo |
 |---|---|
-| `lib/index.js` | host: lettura sorgente, clone persistito, attach, archive, rotte `/api/chatshifter.*` |
-| `lib/client.js` | browser: bundle a mano, contributo menu sessione, conferma, esito |
-| `cordis.patch.yml` | riga `insert` del bundle nel profilo (config `archiveSource`) |
+| `lib/index.js` | host: comando `/quit` registrato, lettura sorgente, clone persistito, attach, archive, rotte `/api/additions.*` (move, info, workspace-stats, sound) |
+| `lib/quit.js` | host: `/quit`, scheduler dello spegnimento (interrupt + watchdog), config `quit` |
+| `lib/sounds.js` | host: risoluzione dei due cue (asset impacchettati o percorso configurato), tipi MIME e rotta `SOUND_PATH` |
+| `lib/workspace-stats.js` | host: scansione di un workspace (byte, directory, file, righe codice/doc), limiti e rotta `STATS_PATH` |
+| `assets/ding.wav`, `assets/uh-oh.wav` | i due suoni predefiniti, sintetizzati (16-bit mono 22 kHz) |
+| `lib/client.js` | browser: bundle a mano su `ctx.slots` — voce «Sposta nel workspace…», dialog, tab «Workspace», watcher dei segnali sonori (namespace `additions`) |
+| `cordis.patch.yml` | riga `insert` del bundle nel profilo (config `archiveSource`, `quit`, `stats`, `sounds`) |
 | `package.json` | bundle + `dsh.client` + export `./client` |
 | `tests/host.test.js` | 15 test host con persistenza/registry finti |
-| `tests/client.test.js` | 13 test del bundle browser (vm, `window.__ModuleLoader__`), inclusi locale, chiavi usate e completezza dizionari |
+| `tests/quit.test.js` | 9 test del comando: config, ordine interrupt/watchdog, idempotenza, annullamento, argomenti rifiutati |
+| `tests/sounds.test.js` | 7 test dei segnali: config, validità dei WAV (header), file sostituito, fallback, rotta e info |
+| `tests/stats.test.js` | 9 test delle statistiche: fixture su disco, CRLF/binari, budget, risoluzione target, rotta e cache |
+| `tests/client.test.js` | 19 test del bundle browser (vm, `window.__ModuleLoader__`): registrazioni slot, controller, transizioni dei segnali, player audio, dizionari |
+| `scripts/make-sounds.mjs` | rigenera i due WAV (sintesi a partiali, nessun campione di terzi) |
 | `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura (preferendo una con watermark), sposta a freddo e a caldo, riapre la copia |
 | `scripts/repro-delivery.mjs` | riproduce il guasto dei marker di consegna su una sessione reale (diagnostica) |
 | `scripts/repair-delivery.mjs` | ripara una copia già corrotta ri-puntando i marker, con dry-run e `--apply` |
 | `LICENSE` | licenza MIT |
-| `CHANGELOG.md` | cronologia 0.1.0 → 0.1.1 → 0.2.0 |
-| `dist/dsh-chatshifter-<version>.tgz` | tarball generato da `npm pack`, non versionato |
+| `CHANGELOG.md` | cronologia 0.1.0 → 0.1.1 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 |
+| `dist/dsh-additions-<version>.tgz` | tarball generato da `npm pack`, non versionato |
 | `probe-report.json` | reperto storico del POC (non più usato) |
 | `TODO.md` | backlog operativo per la 1.0.0 |
 | `PROJECT_STATE.md` | questo file |
@@ -244,7 +354,7 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 
 ```powershell
 # test (sempre con isolation none sotto sandbox DSH)
-node --test --test-isolation=none tests/
+npm test
 
 # integrazione con il backend reale (percorso pacchetti opzionale)
 node scripts/integration.mjs
@@ -254,20 +364,27 @@ npm test
 npm pack --pack-destination dist
 
 # stato del profilo
-dsh plugin --profile web why dsh-chatshifter
+dsh plugin --profile web why dsh-additions
 # oppure, dall'agente: plugin_manager list_plugins / list_bundles
 ```
 
-Per aggiornare il plugin nel profilo live: il bundle è `link:`, quindi le
-modifiche a `lib/index.js` richiedono il riavvio della voce (toggle dalla
-pagina Plugin o riavvio DSH); per il client vedi la scoperta 6.
+Per aggiornare il plugin nel profilo live: una voce **nuova** entra nel grafo
+solo al riavvio di DSH (il server legge i bundle del profilo al boot). Il tipo
+di installazione decide il resto: con il tarball serve rifare `npm pack` e
+reinstallare; con `link:` il codice del checkout è già nel profilo, ma la voce
+va comunque riavviata (toggle dalla pagina Plugin o riavvio DSH); per il client
+vedi la scoperta 6.
 
-Domani (13/11): aprire [TODO.md](TODO.md) e partire dai P0.
+Si riparte da [TODO.md](TODO.md), dai P0.
 
 ## Prossimi passi
 
-La 0.2.0 è finalizzata. Il backlog per la 1.0.0 — bloccanti su dati e
-compatibilità, qualità/CI, release — è in [TODO.md](TODO.md). Domani si riparte
-da lì; i primi tre punti sono: validazione della copia prima dell'archiviazione,
-gestione delle chat in esecuzione, cleanup/idempotenza quando `attachSession`
-fallisce.
+La 0.5.3 è installata e le superfici sono state verificate a video il 25/11. In
+ordine:
+
+1. **`/quit` a video**: è l'unica cosa non ancora provata (interrompe il server,
+   va fatto quando la sessione non serve);
+2. **pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
+   e/o il repository GitHub, oggi privato; poi lo smoke test in un profilo pulito;
+3. riprendere il backlog P0 di [TODO.md](TODO.md): validazione della copia prima
+   dell'archiviazione, gestione delle chat in esecuzione, idempotenza.

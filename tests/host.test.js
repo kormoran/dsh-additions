@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import test from 'node:test'
 
 import { MOVE_PATH, INFO_PATH, MoveError, apply, buildHeader, performMove, reidentifyDeliveryMarkers } from '../lib/index.js'
+import { SOUND_PATH } from '../lib/sounds.js'
+import { STATS_PATH } from '../lib/workspace-stats.js'
 
 /**
  * In-memory stand-in for the persistence seam. It enforces the same
@@ -132,7 +134,7 @@ function event(seq) {
  * @returns the context, its parts, and a directory helper.
  */
 async function harness(options = {}) {
-  const root = await mkdtemp(join(tmpdir(), 'chatshifter-'))
+  const root = await mkdtemp(join(tmpdir(), 'additions-'))
   const sourceDir = join(root, 'source-project')
   const targetDir = join(root, 'target-project')
   await mkdir(sourceDir, { recursive: true })
@@ -440,8 +442,15 @@ test('the HTTP routes answer with JSON and map expected refusals', async () => {
   const parts = await harness({ live: { events: [event(0)] } })
   try {
     const routes = new Map()
+    const commands = []
     const ctx = {
       ...parts.ctx,
+      commands: {
+        register: (definition) => {
+          commands.push(definition)
+          return () => {}
+        },
+      },
       connection: {
         fetch: {
           register: (route) => {
@@ -454,11 +463,15 @@ test('the HTTP routes answer with JSON and map expected refusals', async () => {
     }
     apply(ctx, { archiveSource: true })
 
-    assert.deepEqual([...routes.keys()].sort(), [INFO_PATH, MOVE_PATH].sort())
+    assert.deepEqual([...routes.keys()].sort(), [INFO_PATH, MOVE_PATH, SOUND_PATH, STATS_PATH].sort())
+    assert.deepEqual(commands.map((entry) => entry.name), ['quit'], 'the slash command is registered')
 
     const info = await routes.get(INFO_PATH).fetch(new Request(`http://localhost${INFO_PATH}`))
     assert.equal(info.status, 200)
-    assert.equal((await info.json()).archiveSource, true)
+    const infoBody = await info.json()
+    assert.equal(infoBody.archiveSource, true)
+    assert.equal(infoBody.quit.command, 'quit')
+    assert.equal(typeof infoBody.quit.delayMs, 'number')
 
     const badBody = await routes
       .get(MOVE_PATH)

@@ -1,5 +1,5 @@
 /**
- * Real-backend integration check for dsh-chatshifter.
+ * Real-backend integration check for dsh-additions.
  *
  * It composes the SHIPPED session store and JSONL persistence backend from the
  * local dsh installation, reads one real stored session (read-only), then runs
@@ -35,7 +35,7 @@ const { SessionId } = await importPackage('dsh-session/lib/index.js')
 const JsonlPersistence = await importPackage('dsh-session-persistence-jsonl/lib/index.js')
 
 const realSessionsRoot = join(homedir(), '.dsh', 'sessions')
-const workRoot = await mkdtemp(join(tmpdir(), 'chatshifter-it-'))
+const workRoot = await mkdtemp(join(tmpdir(), 'additions-it-'))
 const targetDir = join(workRoot, 'target workspace')
 const sourceDir = join(workRoot, 'source workspace')
 await mkdir(targetDir, { recursive: true })

@@ -70,7 +70,7 @@ if (rewritten === 0) {
   process.exit(0)
 }
 
-const workRoot = await mkdtemp(join(tmpdir(), 'chatshifter-repair-'))
+const workRoot = await mkdtemp(join(tmpdir(), 'additions-repair-'))
 const writer = new Context()
 await writer.plugin(SessionStore)
 await writer.plugin(JsonlPersistence, { root: join(workRoot, 'root') })

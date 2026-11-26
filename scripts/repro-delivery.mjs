@@ -24,7 +24,7 @@ const { default: SessionStore } = await load('dsh-session/lib/index.js')
 const JsonlPersistence = await load('dsh-session-persistence-jsonl/lib/index.js')
 
 const realRoot = join(homedir(), '.dsh', 'sessions')
-const workRoot = await mkdtemp(join(tmpdir(), 'chatshifter-repro-'))
+const workRoot = await mkdtemp(join(tmpdir(), 'additions-repro-'))
 const targetDir = join(workRoot, 'target')
 await mkdir(targetDir, { recursive: true })
 
