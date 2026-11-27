@@ -19,7 +19,7 @@ Backlog operativo per `dsh-additions`.
         27/11 (scrittura `settings/mutate` → rotta con il nuovo file → unset).
   - [ ] **Pagina di configurazione (0.7.0)**: namespace `additions` con casella
         «attiva i suoni» e due caselle di testo, registrata in
-        `plugins.row.config`. Logica coperta da 26 test del bundle e schema
+        `plugins.row.config`. Logica coperta dai 33 test del bundle e schema
         verificato via `settings/describe`; manca la prova a video
         (apertura dalla pagina Plugins, Salva, cambio file a pagina aperta).
   - [ ] Valutare `sounds.onlyActive: true` (oggi suona anche per i subagenti, che
@@ -47,7 +47,7 @@ Backlog operativo per `dsh-additions`.
       `locale/<id>.json` per zh, en, ja, es, fr, de, ru, pt e it (titolo e
       descrizione), ogni codice d'errore delle rotte mappato su una frase
       localizzata, correzioni pt, test di contratto su metadati e copertura.
-- [ ] **Ambiente: store pnpm del profilo disallineato** (27/11, risolto).
+- [x] **Ambiente: store pnpm del profilo disallineato** (27/11, risolto).
       Causa: due pnpm in PATH — il profilo era installato con la 10.34.9
       (store `v10`), ma `%LOCALAPPDATA%\pnpm\bin` (12.23, store `v11`) veniva
       prima della copia npm-global 10.34.9. Ogni add/remove falliva con
@@ -57,8 +57,8 @@ Backlog operativo per `dsh-additions`.
   - [x] **Pulizia macchina**: `npm rm -g pnpm` eseguito dall'utente il 27/11;
         resta un solo pnpm (12.23.0, store v11).
   - [x] **Profilo allineato**: alias `dsh-chatshifter` rimosso e bundle
-        reinstallato come `dsh-additions@0.7.0` dal tarball
-        `file:…/dist/dsh-additions-0.7.0.tgz`; riga `additions` active,
+        reinstallato come `dsh-additions@0.7.0` prima e `0.10.0` dopo, dal
+        tarball `file:…/dist/dsh-additions-0.10.0.tgz`; riga `additions` active,
         namespace `additions` servito, bundle client servito dalla copia
         installata.
   - [ ] Nota per il futuro: a ogni major di pnpm (store `vN` → `vN+1`) serve un
@@ -70,37 +70,29 @@ Backlog operativo per `dsh-additions`.
 - [ ] Test aggiuntivi: allegati/immagini, chat molto lunga (≥10k eventi), doppio spostamento, route non autorizzata (401/403), cambio lingua.
 - [ ] Installazione da tarball in un **profilo DSH pulito** e verifica della voce in GUI; test di upgrade e uninstall.
 - [ ] Controllo del contenuto di `npm pack` in CI (niente test/script/file interni).
-- [ ] README in inglese (o bilingue) con limiti, snapshot, file condivisi, allegati, subagenti, compatibilità.
+- [x] README in inglese (o bilingue) con limiti, snapshot, file condivisi, allegati, subagenti, compatibilità.
 - [ ] Revisione madrelingua delle 9 traduzioni e gestione dei plurali per le stringhe con conteggi.
 
 ## P1 — release
 
-- [ ] Scegliere il canale: `npm publish` (nome libero) e/o repo GitHub pubblico. Il repo oggi è privato.
-- [ ] Pubblicare `1.0.0-rc.1`, aggiornare CHANGELOG e note di rilascio.
+- [x] Canale scelto: `npm publish` e repo GitHub pubblico (27/11).
+- [ ] Pubblicare `0.10.0` su npm (`npm publish --access public`) e creare la release `v0.10.0`.
 - [ ] Installare l'artefatto pubblicato in un profilo pulito e rifare lo smoke test completo.
 - [ ] Smoke test finale: spostamento chat ferma, rifiuto chat in esecuzione, copia fork-derived, errore localizzato, cambio lingua.
 - [ ] Push di `main` e del tag; allegare il tarball alla release GitHub.
-- [ ] Promuovere a `1.0.0` dopo il periodo di prova.
+- [ ] Listing su `awesome-dsh-plugin` (`data/plugins/kormoran__dsh-additions.yml`) e topic GitHub `dsh-plugin`.
 
-## Decisioni da prendere domani
+## Criteri di qualità
 
-1. Chat in esecuzione: **rifiutare** o **quiescere**? (Consiglio: rifiutare per la 1.0, quiescere in 1.x.)
-2. Job owner e subagent catalog: **riscrivere** gli id o **esentare** con motivazione?
-3. Canale di release: **npm**, **GitHub pubblico**, o entrambi?
-4. Release: **1.0.0-rc.1** subito o **1.0.0** diretto?
-5. Range DSH supportato: solo `0.2.x` o anche la prossima?
-
-## Criterio di uscita
-
-- [ ] Nessun caso noto di perdita/incoerenza dati.
-- [ ] Copia validata prima dell'archiviazione e cleanup sui fallimenti.
-- [ ] Chat in esecuzione gestita con un comportamento documentato.
-- [ ] Audit identità verde.
+- [x] Nessun caso noto di perdita/incoerenza dati (validazione della copia, cleanup).
+- [x] Copia validata prima dell'archiviazione e cleanup sui fallimenti.
+- [x] Chat in esecuzione rifiutate con un comportamento documentato.
+- [x] Audit identità verde.
 - [ ] Test verdi su tre OS e Node 20/22.
 - [ ] Installazione da artefatto pubblicato in un profilo pulito.
 - [ ] README, CHANGELOG, compatibilità e tag allineati.
 
-## Fuori scope per la 1.0
+## Fuori scope
 
 - Merge o fork di conversazioni (il plugin sposta, non fonde).
 - Isolamento dei file del workspace (worktree/git): resta una scelta dell'utente.
