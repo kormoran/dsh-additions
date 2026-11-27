@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -10,6 +10,7 @@ import {
   MOVE_PATH,
   MoveError,
   PREFLIGHT_PATH,
+  VERSION,
   apply,
   buildHeader,
   createMoveEngine,
@@ -793,4 +794,9 @@ test('a copied log keeps job ownership and child identities, and re-points only 
   } finally {
     await parts.cleanup()
   }
+})
+
+test('the host version served by /info matches package.json', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.equal(VERSION, manifest.version, 'bump both together: index.js VERSION and package.json')
 })

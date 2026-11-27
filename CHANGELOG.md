@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.0 — 2026-11-27
+
+- **Metadati del plugin localizzati** nelle otto lingue di DSH più l'italiano:
+  `locale/<id>.json` con `meta.title` e `meta.description` (l'inglese è il
+  fallback dichiarato), export `./locale/*.json` e file inclusi nel tarball. La
+  pagina Plugins mostra così titolo e descrizione nella lingua attiva invece del
+  nome tecnico e della descrizione inglese.
+- **Errori completamente localizzati**: il client mappa **ogni** codice delle
+  rotte di spostamento/preflight e delle statistiche su una frase localizzata
+  (`reason.*`): si aggiungono `same-workspace`, `workspace-not-found`,
+  `missing-target`/`relative-path`/`invalid-path`/`workspace-create-failed`,
+  `unsupported-format`, `clone-invalid`, `attach-failed`, `invalid-body`,
+  `internal`, `path-not-found` e `not-a-directory`. Anche il pannello
+  «Workspace» traduce gli errori della scansione.
+- Elenchi esportati `MOVE_ERROR_CODES` (`lib/move.js`) e `STATS_ERROR_CODES`
+  (`lib/workspace-stats.js`) con un test di contratto: ogni codice ha una
+  chiave `reason.*` presente in tutte e nove le lingue.
+- Correzione di traduzione: il portoghese usa «Espaços de trabalho» per i
+  workspace.
+- 96 test (inclusi i nuovi controlli su metadati e copertura delle traduzioni).
+
 ## 0.9.0 — 2026-11-27
 
 P0 del backlog: sicurezza dei dati e comportamento con lavoro in corso.

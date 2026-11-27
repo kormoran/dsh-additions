@@ -112,7 +112,11 @@ tempo basta).
 
 ## P1 — qualità e test
 
-- [x] **Ambiente: store pnpm del profilo disallineato** (27/11, risolto).
+- [x] **Localizzazione completa (0.10.0)**: metadati del plugin in
+      `locale/<id>.json` per zh, en, ja, es, fr, de, ru, pt e it (titolo e
+      descrizione), ogni codice d'errore delle rotte mappato su una frase
+      localizzata, correzioni pt, test di contratto su metadati e copertura.
+- [ ] **Ambiente: store pnpm del profilo disallineato** (27/11, risolto).
       Causa: due pnpm in PATH — il profilo era installato con la 10.34.9
       (store `v10`), ma `%LOCALAPPDATA%\pnpm\bin` (12.23, store `v11`) veniva
       prima della copia npm-global 10.34.9. Ogni add/remove falliva con

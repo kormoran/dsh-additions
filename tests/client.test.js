@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import vm from 'node:vm'
 
+import { MOVE_ERROR_CODES } from '../lib/index.js'
+import { STATS_ERROR_CODES } from '../lib/workspace-stats.js'
+
 /**
  * Deterministic stand-in for `@deepseek-ai/dsh-client-store`'s snapshot store:
  * the controller only reads and replaces snapshots.
@@ -378,7 +381,8 @@ test('the dialog localizes known refusal codes and falls back to the host text',
   const t = (key) => `t:${key}`
   assert.equal(reasonText(t, { code: 'source-busy', message: 'busy' }), 't:reason.busy')
   assert.equal(reasonText(t, { code: 'move-in-progress', message: 'x' }), 't:reason.inProgress')
-  assert.equal(reasonText(t, { code: 'same-workspace', message: 'English text' }), 'English text')
+  assert.equal(reasonText(t, { code: 'same-workspace', message: 'x' }), 't:reason.sameWorkspace')
+  assert.equal(reasonText(t, { code: 'unknown-code', message: 'English text' }), 'English text')
   assert.equal(reasonText(t, undefined), '')
 })
 
@@ -873,6 +877,19 @@ test('the sound player follows accepted settings changes without a reload', () =
   client.configForms.form.publish({ sounds: { enabled: true, ding: 'C:\\y.wav', approval: 'C:\\z.mp3' } })
   assert.equal(player.enabled, true)
   assert.deepEqual(plain(player.variants), { ding: 'C:\\y.wav', approval: 'C:\\z.mp3' })
+})
+
+test('every refusal code the host can answer is localized', () => {
+  const { exports } = loadBundle()
+  const keys = exports.__move.reasonKeys
+  const codes = [...MOVE_ERROR_CODES, 'invalid-body', 'internal', ...STATS_ERROR_CODES]
+  for (const code of codes) {
+    assert.ok(Object.hasOwn(keys, code), `${code} is mapped to a reason`)
+    for (const locale of ['zh', 'en', 'it']) {
+      assert.ok(Object.hasOwn(exports.__locales[locale], keys[code]), `${locale} has ${keys[code]}`)
+    }
+  }
+  for (const value of Object.values(keys)) assert.match(value, /^reason\./u)
 })
 
 test('every key the bundle translates exists in the Chinese baseline', () => {

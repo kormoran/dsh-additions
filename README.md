@@ -247,25 +247,38 @@ ripristinata.
 
 ## Lingue
 
-La UI del plugin è tradotta in tutte le lingue di DSH più l'italiano:
+Il plugin parla tutte le lingue di DSH più l'italiano, sia nella UI sia nei
+metadati con cui il Plugins page lo presenta:
 
 | `zh` | `en` | `ja` | `es` | `fr` | `de` | `ru` | `pt` | `it` |
 |---|---|---|---|---|---|---|---|---|
 
-I dizionari stanno in `lib/client.js` sotto il namespace `additions`. `zh` è
-la baseline: DSH tipizza e spedisce ogni lingua contro il key set cinese e
-richiede anche `en` come fallback, quindi ogni dizionario deve avere le stesse
-chiavi e gli stessi segnaposto (`{title}`, `{reason}`, …). Il test
-`every locale is complete against the Chinese baseline` lo verifica.
+- **UI**: i dizionari stanno in `lib/client.js` sotto il namespace `additions`.
+  `zh` è la baseline: DSH tipizza e spedisce ogni lingua contro il key set
+  cinese e richiede anche `en` come fallback, quindi ogni dizionario deve avere
+  le stesse chiavi e gli stessi segnaposto (`{title}`, `{reason}`, …). I test
+  `every key the bundle translates…` e `every locale is complete…` lo
+  verificano.
+- **Metadati del plugin** (titolo e descrizione nella pagina Plugins): un file
+  per lingua in `locale/<id>.json`, con `{ "meta": { "title", "description" } }`.
+  DSH legge `locale/en.json` e ogni lingua presente nella stessa cartella;
+  l'inglese è il fallback dichiarato. I file sono esportati come
+  `./locale/*.json` e inclusi nel tarball.
+- **Errori**: l'host non traduce i messaggi, espone un `code` stabile; il client
+  mappa **ogni** codice delle rotte di spostamento e delle statistiche su una
+  frase localizzata (`reason.*`). Un codice sconosciuto ricade sul `message`
+  inglese dell'host. Il test `every refusal code the host can answer is
+  localized` tiene allineati gli elenchi esportati da `lib/move.js` e
+  `lib/workspace-stats.js` con la mappa del bundle.
+- **Limite della piattaforma**: descrizioni e risultati dei comandi (`/quit`,
+  `/rename`) sono testo del host e non hanno un canale di traduzione; DSH
+  localizza lato client solo i comandi built-in. Restano quindi in inglese in
+  ogni lingua, come per gli altri plugin esterni.
 
 L'italiano diventa selezionabile quando un language pack registra la lingua
 `it`: nel profilo `web` lo fa `dsh-locale-it`. Il plugin registra solo il
 dizionario `it`, non la definizione della lingua, così non entra in conflitto
 con il pack che la possiede.
-
-Gli errori dell'host non sono tradotti lato server: la risposta porta un codice
-stabile e i dettagli, e il client compone il messaggio nella lingua attiva. Un
-codice sconosciuto ricade sul `message` inglese dell'host.
 
 ## Installazione
 

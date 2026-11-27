@@ -1,6 +1,6 @@
 {
   "name": "dsh-additions",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Additions for DeepSeek Harness: /quit, /rename, notification sounds with a settings page, workspace statistics, and moving a chat to another workspace.",
   "author": "Massimo Soricetti <massimo.soricetti@gmail.com>",
   "license": "MIT",
@@ -10,7 +10,8 @@
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
     "./package.json": "./package.json",
-    "./cordis.patch.yml": "./cordis.patch.yml"
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "lib/index.js",
@@ -22,6 +23,15 @@
     "lib/workspace-stats.js",
     "assets/ding.wav",
     "assets/uh-oh.wav",
+    "locale/en.json",
+    "locale/zh.json",
+    "locale/ja.json",
+    "locale/es.json",
+    "locale/fr.json",
+    "locale/de.json",
+    "locale/ru.json",
+    "locale/pt.json",
+    "locale/it.json",
     "cordis.patch.yml",
     "CHANGELOG.md"
   ],

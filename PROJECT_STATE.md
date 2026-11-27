@@ -1,6 +1,6 @@
 # PROJECT_STATE — dsh-additions
 
-Memoria permanente del progetto. Aggiornato: **2026-11-27**, versione **0.9.0**.
+Memoria permanente del progetto. Aggiornato: **2026-11-27**, versione **0.10.0**.
 Pacchetto e repository GitHub si chiamano entrambi `dsh-additions` (il repository
 è stato rinominato il 26/11; la cartella locale resta
 `C:\Users\m.soricetti\Documents\GitHub\dsh-chatshifter`).
@@ -16,18 +16,23 @@ file, righe di codice e di documentazione) alimentano il pannello destro
 «Workspace», e i **segnali sonori** di fine turno e richiesta di autorizzazione
 hanno una **pagina di configurazione** nel plugin.
 
-## Stato: 0.9.0 — P0 dello spostamento chiuso (dati, chat occupate, idempotenza)
+## Stato: 0.10.0 — P0 chiuso e localizzazione completa (8 lingue DSH + italiano)
 
-`dsh-additions` v0.9.0 è nel profilo `web` come **tarball**
-(`file:C:/Users/…/dist/dsh-additions-0.9.0.tgz`), la riga `additions` del loader
+`dsh-additions` v0.10.0 è nel profilo `web` come **tarball**
+(`file:C:/Users/…/dist/dsh-additions-0.10.0.tgz`), la riga `additions` del loader
 è `active`. Il pacchetto dichiara il namespace `additions`, la pagina in
-`plugins.row.config` e `engines.dsh`; aggiornare il codice richiede `npm pack` +
-rimozione/reinstallazione del tarball.
+`plugins.row.config`, `engines.dsh` e i metadati localizzati in `locale/`.
 
 Verificato il 27/11 (DSH 0.2.2-rc.1, pnpm 12.23):
 
 ```text
-test:      93/93 unitari verdi
+test:      97/97 unitari verdi (client 33, host 25, /quit 9, /rename 9,
+           statistiche 9, suoni 10, metadati locale 2)
+lingue:    9 file locale/<id>.json (zh en ja es fr de ru pt it) con
+           meta.title/description; UI 63 chiavi per lingua; ogni codice
+           d'errore delle rotte è mappato su reason.* (test di contratto)
+meta:      readPluginMeta('dsh-additions', profilo) risolve il titolo in 9 lingue
+           (en Additions, it Aggiunte, zh 附加功能, …) con fallback inglese
 preflight: sessione viva dentro il turno -> movable:false, code source-busy,
            details.activity = [{kind:'job', items:[…]}, {kind:'turn'}];
            sessione fredda -> movable:true, 1322 eventi, formatStatus current
@@ -37,11 +42,10 @@ schema:    volatileForm(Config) proietta { sounds: { enabled, ding, approval } }
 describe:  settings/describe serve {"ns":"additions",…}; value/base coerenti
 integration: log reale 1322 eventi, 170 marker ri-puntati; la copia viene
            riaperta e validata (freddo e caldo), poi riaperta per il confronto
-host:      GET /api/additions.info -> 200, version 0.9.0
-bundle:    /plugins/??dsh-additions/client.js&rev=929efa502c50 -> 200, 77.637 byte,
-           contiene il preflight e i motivi localizzati
-pacchetto: dist/dsh-additions-0.9.0.tgz — 14 file, 129,0 kB, sha1 555c2808…
-profilo:   dsh-additions@0.9.0 da file:…/dist/dsh-additions-0.9.0.tgz
+host:      GET /api/additions.info -> 200, version 0.10.0
+bundle:    /plugins/??dsh-additions/client.js&rev=… -> 200 (preflight e reason.*)
+pacchetto: dist/dsh-additions-0.10.0.tgz — 23 file, 134,0 kB, sha1 0765e393…
+profilo:   dsh-additions@0.10.0 da file:…/dist/dsh-additions-0.10.0.tgz
 pnpm:      profilo migrato a pnpm 12.23/store v11; lockfile v9 invariato
 ```
 
@@ -88,6 +92,33 @@ rifiuto delle chat occupate (che la RPC ha già verificato).
 10. **Resta aperto (documentato)**: titolo delle copie fork-derived senza
     `session/title` (workaround `/rename`), deselezione della chat aperta dopo
     l'archiviazione (nessuna API pubblica), matrice multi-OS (serve CI).
+
+## Localizzazione (0.10.0) — fatti
+
+1. **La UI segue la lingua attiva** con `ctx.locale.register('additions',
+   DICTIONARIES)` e `ctx.locale.bind('additions')`; i dizionari sono in
+   `lib/client.js` (zona `BASE_DICTIONARIES`, `PANEL_DICTIONARIES`,
+   `SETTINGS_DICTIONARIES`, `MOVE_STATUS_DICTIONARIES`,
+   `MOVE_REASON_DICTIONARIES`, uniti in `DICTIONARIES`). `zh` è la baseline
+   tipizzata, `en` è il fallback richiesto; i test verificano chiavi e segnaposto
+   identici in tutte e nove le lingue.
+2. **I metadati del plugin vanno in `locale/<lang>.json`**, non nel bundle:
+   `dsh-app-boot` risolve `<specifier>/locale/en.json`, poi legge ogni `.json`
+   nella stessa cartella e ne prende `meta.title`/`meta.description`
+   (`readPluginMeta`). Senza `locale/en.json` nessuna lingua viene letta; senza
+   export `./locale/*.json` la risoluzione fallisce. Titolo assente ⇒ nome del
+   pacchetto, descrizione assente ⇒ description del package.json.
+3. **I codici d'errore sono il contratto**: l'host risponde sempre
+   `{ code, message, details }`; il client mappa ogni codice su `reason.*`
+   (`REASON_KEYS`) e ricade sul messaggio inglese solo per un codice
+   sconosciuto. `MOVE_ERROR_CODES` (move.js) e `STATS_ERROR_CODES`
+   (workspace-stats.js) sono esportati e un test verifica che ogni codice abbia
+   una chiave presente nelle nove lingue.
+4. **Limite della piattaforma**: descrizioni e risultati dei comandi sono testo
+   del host (`CommandDescriptor.description`, `CommandResult.text`); il client
+   localizza lato client solo i comandi built-in (`builtinRowFace`). `/quit` e
+   `/rename` restano quindi in inglese in ogni lingua, come gli altri plugin
+   esterni. Non è aggirabile senza un cambio a monte.
 
 ## Meccanica di `/rename` (0.8.0) — fatti
 
@@ -258,9 +289,10 @@ Due correzioni emerse usando il plugin su Node 24 / DSH 0.2.1-rc.2:
 | **0.7.0** | Namespace di impostazioni `additions` (schema `Config` con campi volatili) e pagina dei suoni in `plugins.row.config`. |
 | **0.8.0** | `/rename <titolo>` dal composer, sullo stesso percorso del rename nativo; installazione del profilo dal tarball `dsh-additions`. |
 | **0.9.0** | P0 dello spostamento: validazione della copia prima dell'archiviazione, rifiuto delle chat occupate con preflight, lock/`requestId`, audit delle identità, confronto path per piattaforma, `engines.dsh`. |
+| **0.10.0** | Localizzazione completa: metadati del plugin in `locale/` per 9 lingue, ogni codice d'errore mappato su una frase localizzata, correzioni pt, test di contratto. |
 | **Profilo** | Rimossi i due link orfani e la vecchia cartella del probe; profilo `web` pulito, plugin live ancora attivo. |
 | **Pacchetto** | `package.json` completo, LICENSE MIT, CHANGELOG, tarball verificato, import del modulo host riuscito, `npm pack` senza file interni. |
-| **Verifiche** | 93/93 test unitari, integrazione JSONL reale (che ora esercita anche la validazione della copia), smoke test GUI, cambio lingua a video, riparazione di `session-fb1907a8…` con 1321 eventi. |
+| **Verifiche** | 96/96 test unitari, integrazione JSONL reale (che ora esercita anche la validazione della copia), smoke test GUI, cambio lingua a video, riparazione di `session-fb1907a8…` con 1321 eventi. |
 
 ## Architettura scelta: clonazione del log
 
@@ -475,15 +507,17 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 | `lib/sounds.js` | host: risoluzione dei due cue (asset impacchettati o percorso configurato), `readLive()` per i campi volatili, tipi MIME e rotta `SOUND_PATH` |
 | `lib/workspace-stats.js` | host: scansione di un workspace (byte, directory, file, righe codice/doc), limiti e rotta `STATS_PATH` |
 | `assets/ding.wav`, `assets/uh-oh.wav` | i due suoni predefiniti, sintetizzati (16-bit mono 22 kHz) |
-| `lib/client.js` | browser: bundle a mano su `ctx.slots` — voce «Sposta nel workspace…», dialog, tab «Workspace», watcher dei segnali sonori, pagina di configurazione dei suoni in `plugins.row.config` |
+| `lib/client.js` | browser: bundle a mano su `ctx.slots` — voce «Sposta nel workspace…», dialog con preflight, tab «Workspace», watcher dei segnali sonori, pagina di configurazione dei suoni; dizionari di 63 chiavi × 9 lingue |
+| `locale/<id>.json` | metadati del plugin localizzati (titolo/descrizione) per zh, en, ja, es, fr, de, ru, pt, it |
 | `cordis.patch.yml` | riga `insert` del bundle nel profilo (config `archiveSource`, `quit`, `stats`, `sounds`) |
 | `package.json` | bundle + `dsh.client` + export `./client` |
-| `tests/host.test.js` | 24 test del motore/rotte con persistenza e registry finti: clone, validazione, busy, lock/requestId, cleanup, identità, path |
+| `tests/host.test.js` | 25 test del motore/rotte con persistenza e registry finti: clone, validazione, busy, lock/requestId, cleanup, identità, path, versione |
 | `tests/quit.test.js` | 9 test del comando: config, ordine interrupt/watchdog, idempotenza, annullamento, argomenti rifiutati |
 | `tests/rename.test.js` | 9 test del comando: parsing del titolo, registrazione, rinomina, virgolette, uso, chat non viva, titolo invalido, errore generico, wiring con e senza il servizio |
 | `tests/sounds.test.js` | 10 test dei segnali: config, riferimenti volatili, schema `Config`, validità dei WAV (header), file sostituito, fallback, rotta (anche live) e info |
 | `tests/stats.test.js` | 9 test delle statistiche: fixture su disco, CRLF/binari, budget, risoluzione target, rotta e cache |
-| `tests/client.test.js` | 32 test del bundle browser (vm, `window.__ModuleLoader__`): registrazioni slot, controller, preflight, transizioni dei segnali, player audio, pagina delle impostazioni, dizionari |
+| `tests/client.test.js` | 33 test del bundle browser (vm, `window.__ModuleLoader__`): registrazioni slot, controller, preflight, transizioni dei segnali, player audio, pagina delle impostazioni, dizionari e copertura dei codici d'errore |
+| `tests/locale-files.test.js` | 2 test dei metadati: 9 file localizzati, export e file nel tarball, fallback inglese e italiano |
 | `scripts/make-sounds.mjs` | rigenera i due WAV (sintesi a partiali, nessun campione di terzi) |
 | `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura (preferendo una con watermark), sposta a freddo e a caldo, riapre la copia |
 | `scripts/repro-delivery.mjs` | riproduce il guasto dei marker di consegna su una sessione reale (diagnostica) |
@@ -544,8 +578,8 @@ dall'utente il 27/11: resta un solo pnpm (12.23, store v11).
 un `pnpm install` in ogni albero gestito da pnpm (profilo incluso), altrimenti
 add/remove si bloccano finché non lo si fa.
 
-Si riparte da [TODO.md](TODO.md): i P0 dello spostamento sono chiusi in 0.9.0;
-restano i video, la CI e la release.
+Si riparte da [TODO.md](TODO.md): i P0 dello spostamento sono chiusi in 0.9.0 e
+la localizzazione in 0.10.0; restano i video, la CI e la release.
 
 ## Prossimi passi
 
@@ -554,13 +588,16 @@ restano i video, la CI e la release.
    occupata (aprire il dialog su una chat in esecuzione: deve mostrare il motivo
    localizzato invece delle destinazioni). La RPC ha già verificato preflight e
    `/rename` in lettura.
-2. **Aggiornare il bundle installato**: il profilo usa il tarball
-   `file:…/dist/dsh-additions-0.9.0.tgz`; dopo ogni modifica al codice servono
+2. **Controllo delle lingue a video**: cambiare la lingua dell'interfaccia
+   (es. `fr`, `ja`) e verificare la pagina Plugins (titolo/descrizione del
+   plugin), il dialog di spostamento e la pagina dei suoni.
+3. **Aggiornare il bundle installato**: il profilo usa il tarball
+   `file:…/dist/dsh-additions-0.10.0.tgz`; dopo ogni modifica al codice servono
    `npm pack` + rimozione/reinstallazione (vedi «Come riprendere»).
-3. **P1**: CI multi-OS/Node, test ermetici, smoke test da artefatto pubblicato,
-   README inglese, revisione traduzioni.
-4. **Pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
+4. **P1**: CI multi-OS/Node, test ermetici, smoke test da artefatto pubblicato,
+   README inglese, revisione madrelingua delle traduzioni.
+5. **Pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
    e/o il repository GitHub, oggi privato; poi lo smoke test in un profilo pulito.
-5. Restano aperti e documentati tre punti UX/ambiente: titolo delle copie
+6. Restano aperti e documentati tre punti UX/ambiente: titolo delle copie
    fork-derived senza `session/title` (workaround `/rename`), deselezione della
    chat aperta dopo l'archiviazione (nessuna API pubblica), matrice multi-OS.
