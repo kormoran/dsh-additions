@@ -24,12 +24,53 @@ function createSnapshotStore(initial) {
 }
 
 /**
+ * Minimal hook runtime for rendering a function component more than once:
+ * state slots survive re-renders, effects are not executed.
+ * @returns the React stand-in and a cursor reset for each render.
+ */
+function createHookRuntime() {
+  const slots = []
+  let cursor = 0
+  const react = {
+    useState(initial) {
+      const index = cursor++
+      if (!(index in slots)) slots[index] = { value: typeof initial === 'function' ? initial() : initial }
+      const state = slots[index]
+      const set = (next) => {
+        state.value = typeof next === 'function' ? next(state.value) : next
+      }
+      return [state.value, set]
+    },
+    useEffect() {},
+    useMemo(factory) {
+      return factory()
+    },
+    useRef(initial) {
+      const index = cursor++
+      if (!(index in slots)) slots[index] = { current: initial }
+      return slots[index]
+    },
+  }
+  return {
+    react,
+    begin() {
+      cursor = 0
+    },
+    reset() {
+      slots.length = 0
+      cursor = 0
+    },
+  }
+}
+
+/**
  * Load the hand-authored browser bundle the way the client module system does:
  * execute the script, capture the registration, and materialize the exports
  * with platform-module stubs.
+ * @param options - optional `react` stand-in (a hook runtime).
  * @returns the plugin exports and the registration id.
  */
-function loadBundle() {
+function loadBundle(options = {}) {
   let registration
   const window = { __ModuleLoader__: { load: (value) => (registration = value) } }
   const context = {
@@ -39,19 +80,21 @@ function loadBundle() {
     clearTimeout,
     URLSearchParams,
     Intl,
-    fetch: async () => ({ ok: false, status: 0, json: async () => null }),
+    fetch: options.fetch ?? (async () => ({ ok: false, status: 0, json: async () => null })),
   }
   vm.runInNewContext(readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8'), context, {
     filename: 'lib/client.js',
   })
   assert.ok(registration, 'the bundle registers itself')
   const modules = {
-    react: {
-      useState: () => [undefined, () => {}],
-      useMemo: (factory) => factory(),
-      useEffect: () => {},
-      useRef: (initial) => ({ current: initial }),
-    },
+    react:
+      options.react ??
+      {
+        useState: () => [undefined, () => {}],
+        useMemo: (factory) => factory(),
+        useEffect: () => {},
+        useRef: (initial) => ({ current: initial }),
+      },
     'react/jsx-runtime': {
       jsx: (type, props) => ({ type, props }),
       jsxs: (type, props) => ({ type, props }),
@@ -61,6 +104,8 @@ function loadBundle() {
       Modal: 'Modal',
       Button: 'Button',
       MenuItemButton: 'MenuItemButton',
+      Switch: 'Switch',
+      Input: 'Input',
     },
     '@deepseek-ai/dsh-client-store': { createSnapshotStore },
   }
@@ -73,16 +118,65 @@ function loadBundle() {
 }
 
 /**
+ * In-memory settings form mirror: one accepted section plus recorded writes.
+ * @param options - starting `value`, `status`, `writable`, and whether the
+ * namespace is served.
+ * @returns the form and the `configForms` service stand-in.
+ */
+function createConfigForms(options = {}) {
+  const listeners = new Set()
+  const form = {
+    revision: 1,
+    writes: [],
+    snapshot: {
+      status: options.status ?? 'ready',
+      value: options.value ?? { sounds: { enabled: true, ding: '', approval: '' } },
+      base: undefined,
+      user: undefined,
+      revision: 1,
+      writable: options.writable ?? true,
+    },
+    getSnapshot() {
+      return this.snapshot
+    },
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    async mutate(ops) {
+      this.writes.push(ops)
+      return options.acceptWrites !== false
+    },
+    publish(value) {
+      this.snapshot = { ...this.snapshot, value, revision: this.snapshot.revision + 1 }
+      for (const listener of [...listeners]) listener()
+    },
+  }
+  const served = options.served !== false
+  return {
+    form,
+    service: {
+      get: () => form,
+      describe: () => ({ getSnapshot: () => ({ namespaces: [] }), subscribe: () => () => {} }),
+      whileServed: (namespaces, register) => (served ? register(new Set(namespaces)) : () => {}),
+    },
+  }
+}
+
+/**
  * Client-context stand-in: records slot registrations and locale dictionaries.
+ * @param options - optional settings form/service stand-ins.
  * @returns the context plus the recorded entries.
  */
-function createClient() {
+function createClient(options = {}) {
   const registrations = []
   const locales = []
   const panelTypes = []
+  const configForms = options.configForms === null ? undefined : (options.configForms ?? createConfigForms(options))
   const ctx = {
     effect: (factory) => factory(),
-    inject: (names, factory) => factory(ctx),
+    inject: (names, factory) => (names.every((name) => ctx[name] !== undefined) ? factory(ctx) : undefined),
+    configForms: configForms?.service,
     locale: {
       register: (namespace, dictionaries) => {
         locales.push({ namespace, dictionaries })
@@ -115,7 +209,7 @@ function createClient() {
     sessions: { refresh: async () => {} },
     remote: { directoryPicker: { pick: async () => null } },
   }
-  return { ctx, registrations, locales, panelTypes }
+  return { ctx, registrations, locales, panelTypes, configForms }
 }
 
 /** @returns a fetch stub resolving one JSON payload with a status. */
@@ -132,6 +226,7 @@ test('the bundle announces itself with the package id and the slot-based API', (
   assert.equal(id, 'dsh-additions')
   assert.equal(exports.name, 'dsh-additions')
   assert.deepEqual([...exports.inject], ['slots', 'locale', 'workspaces', 'sessions', 'remote'])
+  assert.equal(exports.inject.includes('configForms'), false, 'the settings service is optional')
   assert.equal(typeof exports.apply, 'function')
   assert.equal(exports.inject.includes('contextMenus'), false, 'the retired API is not requested')
 })
@@ -144,12 +239,22 @@ test('apply registers the Session menu row, the dialog and the workspace panel',
   assert.equal(client.locales.length, 1)
   assert.equal(client.locales[0].namespace, 'additions')
 
-  assert.equal(client.registrations.length, 5)
+  assert.equal(client.registrations.length, 7)
   const menu = client.registrations.find((entry) => entry.definition.id === 'additions.move')
   const dialog = client.registrations.find((entry) => entry.definition.id === 'additions.move-dialog')
   const panel = client.registrations.find((entry) => entry.definition.key === 'additions.workspace-panel')
   const panelTitle = client.registrations.find((entry) => entry.definition.name === 'sidebar.right.pane.tab.title')
   const watcher = client.registrations.find((entry) => entry.definition.id === 'additions.sound-watcher')
+  const settingsPages = client.registrations.filter((entry) => entry.definition.name === 'plugins.row.config')
+  assert.equal(settingsPages.length, 2, 'one page per bundle-name spelling')
+  assert.deepEqual(
+    settingsPages.map((entry) => entry.definition.key).sort(),
+    ['dsh-additions#additions', 'dsh-chatshifter#additions'],
+  )
+  for (const entry of settingsPages) {
+    assert.equal(entry.definition.locale, 'additions')
+    assert.equal(typeof entry.definition.inject().saveSounds, 'function')
+  }
   assert.ok(watcher, 'the sound watcher is registered')
   assert.equal(watcher.definition.name, 'shell.overlay')
   assert.equal(typeof watcher.definition.inject().player.play, 'function')
@@ -505,6 +610,185 @@ test('configure follows the host sound settings', () => {
   assert.equal(player.volume, 1)
   player.configure({ enabled: true, volume: -3 })
   assert.equal(player.volume, 0)
+})
+
+/**
+ * Strip the vm realm from a value so deep equality compares plain data.
+ * @param value - value produced inside the bundle's context.
+ * @returns a structured clone of it.
+ */
+function plain(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+test('repointing a cue drops its decoded buffer and refetches it', async () => {
+  const { exports } = loadBundle()
+  const audio = fakeAudio()
+  const urls = []
+  const player = exports.__sounds.createSoundPlayer({
+    createAudioContext: () => audio.context,
+    fetcher: async (url) => {
+      urls.push(url)
+      return { ok: true, arrayBuffer: async () => new ArrayBuffer(8) }
+    },
+    log: () => {},
+  })
+
+  await player.play('ding')
+  await player.play('ding')
+  assert.equal(urls.length, 1, 'the decoded buffer is reused while the path stands')
+
+  player.configure({ ding: 'C:\\bell.wav' })
+  assert.deepEqual(plain(player.variants), { ding: 'C:\\bell.wav', approval: '' })
+  await player.play('ding')
+  assert.equal(urls.length, 2, 'a new path forces a fresh fetch')
+  assert.match(urls[1], /which=ding&v=C%3A%5Cbell\.wav/u)
+
+  player.configure({ approval: 'C:\\uh.mp3' })
+  await player.play('ding')
+  assert.equal(urls.length, 2, 'an unrelated cue change keeps the ding buffer')
+})
+
+/**
+ * Walk a jsx-runtime stub tree and collect elements matching a predicate.
+ * @param node - element, array, or primitive.
+ * @param predicate - element filter.
+ * @returns the matching elements.
+ */
+function findAll(node, predicate) {
+  const found = []
+  const visit = (value) => {
+    if (value === null || value === undefined || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item)
+      return
+    }
+    if (predicate(value)) found.push(value)
+    if (value.props !== undefined) visit(value.props.children)
+  }
+  visit(node)
+  return found
+}
+
+/**
+ * Render the settings page with a stateful hook runtime, against the recorded
+ * `plugins.row.config` registration.
+ * @param options - settings-form options plus an optional `view`.
+ * @returns the current tree, a re-render, the form, and the client.
+ */
+function renderSettingsPage(options = {}) {
+  const runtime = createHookRuntime()
+  const { exports } = loadBundle({ react: runtime.react })
+  const client = createClient(options)
+  exports.apply(client.ctx)
+  const registration = client.registrations.find((entry) => entry.definition.name === 'plugins.row.config')
+  assert.ok(registration, 'the settings page is registered')
+  const form = client.configForms.form
+  const props = {
+    view: options.view ?? 'page',
+    t: (key, params) => (params === undefined ? key : `${key}:${JSON.stringify(params)}`),
+    useSoundForm: (selector) => selector(form.getSnapshot()),
+    saveSounds: (ops) => form.mutate(ops),
+  }
+  const render = () => {
+    runtime.begin()
+    return registration.component(props)
+  }
+  return { tree: render(), render, form, registration, client }
+}
+
+test('the settings page summarizes the notification switch', () => {
+  assert.equal(renderSettingsPage({ view: 'summary' }).tree, 'settings.summaryOn')
+  assert.equal(
+    renderSettingsPage({
+      view: 'summary',
+      value: { sounds: { enabled: false, ding: '', approval: '' } },
+    }).tree,
+    'settings.summaryOff',
+  )
+})
+
+test('the settings page renders the switch and the two cue paths', () => {
+  const page = renderSettingsPage()
+  const switches = findAll(page.tree, (node) => node.type === 'Switch')
+  const inputs = findAll(page.tree, (node) => node.type === 'Input')
+  assert.equal(switches.length, 1)
+  assert.equal(switches[0].props.checked, true)
+  assert.equal(inputs.length, 2)
+  assert.equal(inputs[0].props.value, '')
+  assert.equal(inputs[0].props['aria-label'], 'settings.ding')
+  assert.equal(inputs[1].props['aria-label'], 'settings.approval')
+  const save = findAll(page.tree, (node) => node.type === 'Button' && node.props.variant === 'primary')[0]
+  assert.equal(save.props.disabled, true, 'nothing is staged yet')
+})
+
+test('the switch writes immediately and a refused write is reported', async () => {
+  const page = renderSettingsPage({ acceptWrites: false })
+  const toggle = findAll(page.tree, (node) => node.type === 'Switch')[0]
+  toggle.props.onChange(false)
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  assert.deepEqual(plain(page.form.writes.at(-1)), [{ op: 'set', path: ['sounds', 'enabled'], value: false }])
+  const refusal = findAll(page.render(), (node) => node.props?.children === 'settings.refused')
+  assert.equal(refusal.length, 1)
+})
+
+test('Save submits both cue paths trimmed and enables only while dirty', async () => {
+  const page = renderSettingsPage()
+  const edit = (index, value) => {
+    const inputs = findAll(page.render(), (node) => node.type === 'Input')
+    inputs[index].props.onChange({ target: { value } })
+  }
+
+  edit(0, '  C:\\a.wav  ')
+  edit(1, 'C:\\b.mp3')
+  const save = findAll(page.render(), (node) => node.type === 'Button' && node.props.variant === 'primary')[0]
+  assert.equal(save.props.disabled, false)
+
+  save.props.onClick()
+  await Promise.resolve()
+  assert.deepEqual(plain(page.form.writes.at(-1)), [
+    { op: 'set', path: ['sounds', 'ding'], value: 'C:\\a.wav' },
+    { op: 'set', path: ['sounds', 'approval'], value: 'C:\\b.mp3' },
+  ])
+})
+
+test('the settings page is registered only while the host serves the namespace', () => {
+  const { exports } = loadBundle()
+  const client = createClient({ served: false })
+  exports.apply(client.ctx)
+  assert.equal(client.registrations.filter((entry) => entry.definition.name === 'plugins.row.config').length, 0)
+})
+
+test('without the settings service the rest of the plugin stays and /info configures the cues', async () => {
+  const { exports } = loadBundle({
+    fetch: async () => ({ ok: true, json: async () => ({ sounds: { enabled: false, volume: 0.5 } }) }),
+  })
+  const client = createClient({ configForms: null })
+  exports.apply(client.ctx)
+
+  assert.equal(client.registrations.filter((entry) => entry.definition.name === 'plugins.row.config').length, 0)
+  assert.equal(client.registrations.length, 5)
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  const watcher = client.registrations.find((entry) => entry.definition.id === 'additions.sound-watcher')
+  const player = watcher.definition.inject().player
+  assert.equal(player.enabled, false)
+  assert.equal(player.volume, 0.5)
+})
+
+test('the sound player follows accepted settings changes without a reload', () => {
+  const { exports } = loadBundle()
+  const client = createClient({
+    value: { sounds: { enabled: false, ding: 'C:\\x.wav', approval: '' } },
+  })
+  exports.apply(client.ctx)
+  const watcher = client.registrations.find((entry) => entry.definition.id === 'additions.sound-watcher')
+  const player = watcher.definition.inject().player
+  assert.equal(player.enabled, false)
+  assert.deepEqual(plain(player.variants), { ding: 'C:\\x.wav', approval: '' })
+
+  client.configForms.form.publish({ sounds: { enabled: true, ding: 'C:\\y.wav', approval: 'C:\\z.mp3' } })
+  assert.equal(player.enabled, true)
+  assert.deepEqual(plain(player.variants), { ding: 'C:\\y.wav', approval: 'C:\\z.mp3' })
 })
 
 test('every key the bundle translates exists in the Chinese baseline', () => {

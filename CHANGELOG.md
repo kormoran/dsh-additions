@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.7.0 — 2026-11-27
+
+- **Il plugin ha un suo namespace di impostazioni** (`additions`): `lib/index.js`
+  esporta ora un `Config` schemastery, e `sounds.enabled`, `sounds.ding` e
+  `sounds.approval` sono campi `.volatile()`. `settings.describe()` serve quindi
+  la namespace `additions` con esattamente quei tre campi, e le scritture si
+  applicano a caldo (nessun riavvio).
+- **Pagina di configurazione nella pagina Plugins**: metà browser registrata in
+  `plugins.row.config` (chiavi `dsh-additions#additions` e, per il profilo con
+  l'alias storico, `dsh-chatshifter#additions`) con
+  - la casella «Attiva i suoni di notifica» (scrive subito),
+  - le due caselle di testo per i file di fine turno e di richiesta
+    autorizzazione (Salva/Annulla, inviate insieme),
+  - lo stato del salvataggio e i messaggi di rifiuto.
+- La pagina segue il namespace servito (`ctx.configForms.whileServed`): su un
+  host senza la namespace non compare, e il resto del plugin resta intatto
+  (`configForms` è iniettato in modo opzionale).
+- Il player segue le impostazioni accettate senza reload: la cache dei buffer è
+  per cue **e percorso**, quindi cambiare file si sente dal segnale successivo
+  anche a pagina aperta.
+- **Nuova dipendenza**: `@deepseek-ai/schemastery` (`~3.19.0`), la libreria di
+  schema che DSH usa per la configurazione. Se manca, il modulo si carica lo
+  stesso (`Config` indefinito → niente namespace, nessuna validazione) e lo
+  segnala nel log del host.
+- `VERSION` della metà host allineata al pacchetto (0.7.0).
+- 23 test nuovi o aggiornati: schema (`volatileForm`-equivalente e proiezione),
+  riferimenti volatili nelle rotte, player per percorso, pagina (switch, caselle,
+  Salva, rifiuto, namespace non servito) e locale completa in 9 lingue.
+- Verificato sul profilo live: `settings/describe` serve `additions` con i tre
+  campi; una scrittura `settings/mutate` ha aggiornato la configurazione a caldo
+  (`/api/additions.info` e la rotta del suono hanno visto il nuovo percorso) e
+  l'`unset` ha ripristinato il default lasciando il patch del profilo pulito.
+
 ## 0.6.0 — 2026-11-26
 
 - **Segnali sonori** (`lib/sounds.js` + watcher nel bundle browser): un `ding`

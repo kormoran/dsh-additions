@@ -1,9 +1,10 @@
 # dsh-additions bundle patch: inserts the host row into the profile roster.
-# The node half (exports ".") registers the `/quit` slash command and serves the
-# /api/additions.* routes (move, workspace statistics, notification sounds); the
-# browser half (exports "./client", declared in package.json dsh.client) adds the
-# "Sposta nel workspace…" action, the right-panel «Workspace» tab, and the two
-# notification cues.
+# The node half (exports ".") registers the `/quit` slash command, declares the
+# `additions` settings namespace, and serves the /api/additions.* routes (move,
+# workspace statistics, notification sounds); the browser half (exports
+# "./client", declared in package.json dsh.client) adds the "Sposta nel
+# workspace…" action, the right-panel «Workspace» tab, the two notification cues
+# and the plugin's settings page (Plugins → dsh-additions → additions row).
 - insert:
     - id: additions
       name: 'dsh-additions'
@@ -21,10 +22,12 @@
         stats:
           timeLimitMs: 10000
           cacheTtlMs: 15000
-        # Notification cues: `ding` when the model finishes its turn, `approval`
-        # when a permission decision is waiting. Point `ding`/`approval` at any
-        # absolute audio path (wav/mp3/ogg/m4a/flac) to replace the packaged
-        # files; a missing file falls back to the packaged cue.
+        # Notification cues. `enabled`, `ding` and `approval` are the plugin's
+        # editable settings fields (`Config` marks them volatile): the settings
+        # page writes them into this profile's patch, and they apply live.
+        # Point `ding`/`approval` at any absolute audio path (wav/mp3/ogg/
+        # m4a/flac); a missing file falls back to the packaged cue. `volume` is
+        # an ordinary field, edited here rather than from the page.
         sounds:
           enabled: true
           volume: 0.7

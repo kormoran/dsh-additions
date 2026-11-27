@@ -1,7 +1,7 @@
 {
   "name": "dsh-additions",
-  "version": "0.6.0",
-  "description": "Additions for DeepSeek Harness: /quit, notification sounds, workspace statistics, and moving a chat to another workspace.",
+  "version": "0.7.0",
+  "description": "Additions for DeepSeek Harness: /quit, notification sounds with a settings page, workspace statistics, and moving a chat to another workspace.",
   "author": "Massimo Soricetti <massimo.soricetti@gmail.com>",
   "license": "MIT",
   "type": "module",
@@ -64,8 +64,12 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
       ]
     }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.19.0"
   }
 }

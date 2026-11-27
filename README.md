@@ -114,11 +114,27 @@ approvazioni, quindi il plugin non può ritardare o bloccare una decisione.
 I suoni predefiniti sono generati da [scripts/make-sounds.mjs](scripts/make-sounds.mjs)
 (16-bit mono, 22 kHz): nessun campione di terzi, licenza pulita, 85 kB in tutto.
 
-### Sostituire i due file
+### Attivare e scegliere i due file
 
-Metti il percorso **assoluto** del tuo file audio nella configurazione del
-bundle (`sounds.ding`, `sounds.approval`); formati accettati: wav, mp3, ogg,
-m4a, flac, webm.
+Due strade equivalenti, perché il plugin dichiara il proprio namespace di
+impostazioni (`additions`) e quindi ha una pagina di configurazione.
+
+**Dalla pagina del plugin** — la via normale: apri **Plugin** nella sidebar,
+scegli `dsh-additions`, apri la riga `additions` e premi il pulsante di
+configurazione. Trovi:
+
+- la casella **«Attiva i suoni di notifica»** (agisce subito, senza ricaricare);
+- la casella **«Fine turno»** con il percorso del file `ding`;
+- la casella **«Richiesta di autorizzazione»** con il percorso del file `approval`;
+- **Salva** / **Annulla** per le due caselle di testo (i percorsi si inviano
+  insieme, così un percorso scritto a metà non sostituisce un suono funzionante).
+
+I valori così scelti finiscono nel patch del profilo (`~/.dsh/profiles/<nome>/cordis.patch.yml`,
+riga `additions`) e vengono applicati a caldo: sono campi *volatili* dello schema
+del plugin, quindi né il server né la pagina vanno riavviati.
+
+**Dalla configurazione del bundle** — per chi preferisce il file, o per un
+profilo generato:
 
 ```yaml
 sounds:
@@ -130,10 +146,13 @@ sounds:
 
 | Campo (`sounds`) | Default | Significato |
 |---|---|---|
-| `enabled` | `true` | spegne entrambi i segnali |
-| `volume` | `0.7` | guadagno applicato dal browser (`0`–`1`) |
-| `ding` | asset impacchettato | file alternativo per la fine del turno |
-| `approval` | asset impacchettato | file alternativo per la richiesta di permesso |
+| `enabled` | `true` | spegne entrambi i segnali (dalla pagina: la casella) |
+| `volume` | `0.7` | guadagno applicato dal browser (`0`–`1`); solo da file |
+| `ding` | asset impacchettato | file alternativo per la fine del turno (dalla pagina: casella) |
+| `approval` | asset impacchettato | file alternativo per la richiesta di permesso (dalla pagina: casella) |
+
+Formati accettati: wav, mp3, ogg, m4a, flac, webm; il percorso deve essere
+**assoluto**.
 
 Il file viene letto **a ogni riproduzione** (niente cache lato host): sostituirlo
 o cambiare percorso ha effetto dal segnale successivo. Se il percorso indicato
@@ -251,12 +270,21 @@ quello letto dalla voce al suo ultimo avvio.
 
 ## Configurazione
 
+Il plugin dichiara uno schema `Config` e con esso il proprio **namespace di
+impostazioni** (`additions`): i campi marcati *volatili* compaiono nella pagina
+di configurazione del plugin e si applicano a caldo.
+
 | Campo | Default | Significato |
 |---|---|---|
 | `archiveSource` | `true` | Archivia (nasconde) l'originale dopo uno spostamento riuscito. `false` lascia entrambe le chat visibili. |
 | `quit` | vedi [Comandi](#quit--ferma-dsh) | `command`, `delayMs`, `graceMs` del comando `/quit`. |
 | `stats` | vedi [Statistiche workspace](#statistiche-workspace) | limiti della scansione (tempo, voci, byte, cache). |
-| `sounds` | vedi [Segnali sonori](#segnali-sonori) | `enabled`, `volume`, `ding`, `approval`. |
+| `sounds` | vedi [Segnali sonori](#segnali-sonori) | `enabled`, `volume`, `ding`, `approval`; `enabled`, `ding` e `approval` sono modificabili dalla pagina. |
+
+Nella pagina del plugin compaiono solo i tre campi volatili di `sounds`;
+`volume` e gli altri blocchi restano configurabili dal patch del profilo. Una
+scrittura dalla pagina salva la configurazione **completa** della riga nel patch
+del profilo (i campi non volatili restano quelli correnti).
 
 ## API interna
 
@@ -283,9 +311,16 @@ Node stesso, non dalla shell, quindi il comando funziona identico su PowerShell,
 cmd e POSIX.
 
 ```powershell
+npm install                           # una volta: @deepseek-ai/schemastery (schema delle impostazioni)
 npm test                              # node --test --test-isolation=none "tests/*.test.js"
 node scripts/integration.mjs
 ```
+
+`@deepseek-ai/schemastery` è una dipendenza vera del pacchetto (è la libreria di
+schema che DSH usa per la configurazione dei plugin). Senza `node_modules` il
+plugin si carica lo stesso — `Config` resta indefinito, la pagina delle
+impostazioni non compare e il test dello schema viene saltato — ma per usare il
+namespace `additions` serve installarla.
 
 Aggiungendo un file `tests/*.test.js` viene raccolto dal glob senza toccare
 `package.json`.

@@ -29,12 +29,19 @@ tempo basta).
   - [ ] `/quit` ancora non provato a video (interrompe il server, va fatto
         quando non serve la sessione).
 
-- [ ] **Segnali sonori (0.6.0)**
+- [ ] **Segnali sonori (0.6.0 → 0.7.0)**
   - [ ] Verifica a video: `ding` alla fine di un turno e «uh oh» su una richiesta
         di permesso; controllare che il primo segnale dopo il caricamento della
         pagina possa restare muto (autoplay) e che dal secondo in poi suoni.
-  - [ ] Provare la sostituzione: puntare `sounds.ding` a un file esterno e
-        verificare l'header `x-additions-sound-source: custom`.
+  - [x] Sostituzione dei file: percorsi configurabili (`sounds.ding`,
+        `sounds.approval`), lettura a ogni riproduzione, fallback all'asset con
+        header `x-additions-sound-source`. Verificato via RPC autenticata il
+        27/11 (scrittura `settings/mutate` → rotta con il nuovo file → unset).
+  - [ ] **Pagina di configurazione (0.7.0)**: namespace `additions` con casella
+        «attiva i suoni» e due caselle di testo, registrata in
+        `plugins.row.config`. Logica coperta da 26 test del bundle e schema
+        verificato via `settings/describe`; manca la prova a video
+        (apertura dalla pagina Plugins, Salva, cambio file a pagina aperta).
   - [ ] Valutare `sounds.onlyActive: true` (oggi suona anche per i subagenti, che
         possono moltiplicare i ding durante workflow) e un breve debounce tra due
         ding ravvicinati.
@@ -97,6 +104,12 @@ tempo basta).
 
 ## P1 — qualità e test
 
+- [ ] **Ambiente: store pnpm del profilo disallineato** (27/11). `node_modules`
+      del profilo `web` è legato allo store pnpm `v10`, ma il `pnpm` in PATH è
+      12.23 e vuole `v11`: ogni operazione di pacchetto fallisce con
+      `ERR_PNPM_UNEXPECTED_STORE` (rimozione/installazione bundle comprese). Va
+      eseguito `pnpm install` nel profilo per migrare, poi si può reinstallare il
+      tarball e rinominare la dipendenza `dsh-chatshifter` → `dsh-additions`.
 - [ ] **CI** su `windows-latest`, `ubuntu-latest`, `macos-latest`; Node 20 e 22.
 - [ ] Test ermetici (fixture, non sessioni reali dell'utente) + integrazione JSONL con root temporanea.
 - [ ] Test aggiuntivi: allegati/immagini, chat molto lunga (≥10k eventi), doppio spostamento, route non autorizzata (401/403), cambio lingua.

@@ -4,13 +4,26 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-import { apply } from '../lib/index.js'
+import { Config, apply } from '../lib/index.js'
 import {
   DEFAULT_VOLUME,
   SOUND_PATH,
   normalizeSoundsConfig,
+  readLive,
   readSound,
 } from '../lib/sounds.js'
+
+/** Shared volatile-reference protocol used by DSH's config runtime. */
+const VOLATILE_WRITE = Symbol.for('cosmokit.volatile.write')
+
+/**
+ * One live config reference, as schemastery produces it.
+ * @param read - reader returning the current value.
+ * @returns a frozen-protocol stand-in.
+ */
+function volatileRef(read) {
+  return { [VOLATILE_WRITE]: () => {}, get: read }
+}
 
 /** @returns the parsed WAV header fields of a byte buffer. */
 function wavHeader(bytes) {
@@ -90,7 +103,52 @@ test('an unknown cue is refused with a stable code', async () => {
   )
 })
 
-test('the route streams audio and maps an unknown cue to a JSON refusal', async () => {
+test('volatile config references are read at use time', () => {
+  let enabled = true
+  let ding = ''
+  let volume = 0.4
+  const sounds = {
+    enabled: volatileRef(() => enabled),
+    volume: volatileRef(() => volume),
+    ding: volatileRef(() => ding),
+    approval: volatileRef(() => ''),
+  }
+  assert.equal(readLive(sounds.enabled), true)
+  assert.deepEqual(normalizeSoundsConfig(sounds), { enabled: true, volume: 0.4, ding: null, approval: null })
+
+  enabled = false
+  ding = process.platform === 'win32' ? 'C:\\sounds\\bell.wav' : '/sounds/bell.wav'
+  volume = 0.9
+  assert.deepEqual(normalizeSoundsConfig(sounds), { enabled: false, volume: 0.9, ding, approval: null })
+  assert.equal(readLive('plain'), 'plain', 'ordinary values pass through')
+  assert.equal(readLive(undefined), undefined)
+})
+
+test('the settings schema makes exactly the cue fields live', { skip: Config === undefined ? 'schemastery is not installed (run npm install)' : false }, () => {
+  const collect = (node, path = []) => {
+    const paths = node?.meta?.volatile === true ? [path.join('.')] : []
+    for (const [key, child] of Object.entries(node?.dict ?? {})) paths.push(...collect(child, [...path, key]))
+    return paths
+  }
+  assert.deepEqual(collect(Config).sort(), ['sounds.approval', 'sounds.ding', 'sounds.enabled'])
+
+  const result = Config['~standard'].validate({})
+  assert.equal('issues' in result, false)
+  const parsed = result.value
+  assert.equal(parsed.archiveSource, true)
+  assert.equal(parsed.quit.delayMs, 500)
+  assert.equal(parsed.quit.graceMs, 5000)
+  assert.equal(parsed.stats.timeLimitMs, 10000)
+  assert.equal(parsed.sounds.volume, DEFAULT_VOLUME)
+  assert.equal(readLive(parsed.sounds.enabled), true)
+  assert.equal(readLive(parsed.sounds.ding), '')
+  assert.equal(readLive(parsed.sounds.approval), '')
+
+  const refused = Config['~standard'].validate({ sounds: { enabled: 'yes' } })
+  assert.ok('issues' in refused, 'a non-boolean switch is refused')
+})
+
+test('the sound route streams audio and maps an unknown cue to a JSON refusal', async () => {
   const routes = new Map()
   const ctx = {
     effect: (factory) => factory(),
@@ -125,6 +183,44 @@ test('the route streams audio and maps an unknown cue to a JSON refusal', async 
   const refused = await route.fetch(new Request(`http://localhost${SOUND_PATH}?which=nope`))
   assert.equal(refused.status, 400)
   assert.equal((await refused.json()).error.code, 'unknown-sound')
+})
+
+test('the sound route reads the live settings value on every request', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'additions-live-'))
+  try {
+    const first = join(directory, 'first.wav')
+    const second = join(directory, 'second.wav')
+    await writeFile(first, 'RIFFfirst')
+    await writeFile(second, 'RIFFsecond')
+    let current = first
+    const routes = new Map()
+    const ctx = {
+      effect: (factory) => factory(),
+      commands: { register: () => () => {} },
+      workspaceRegistry: { get: () => undefined },
+      connection: {
+        fetch: {
+          register: (route) => {
+            routes.set(route.path, route)
+            return () => {}
+          },
+        },
+      },
+    }
+    apply(ctx, { sounds: { ding: volatileRef(() => current) } })
+    const route = routes.get(SOUND_PATH)
+    const fetchCue = () => route.fetch(new Request(`http://localhost${SOUND_PATH}?which=ding`))
+
+    let response = await fetchCue()
+    assert.equal(response.headers.get('x-additions-sound-source'), 'custom')
+    assert.equal(Buffer.from(await response.arrayBuffer()).toString(), 'RIFFfirst')
+
+    current = second
+    response = await fetchCue()
+    assert.equal(Buffer.from(await response.arrayBuffer()).toString(), 'RIFFsecond')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test('the info route publishes the sounds config', async () => {

@@ -1,19 +1,93 @@
 # PROJECT_STATE — dsh-additions
 
-Memoria permanente del progetto. Aggiornato: **2026-11-26**, versione **0.6.0**.
+Memoria permanente del progetto. Aggiornato: **2026-11-27**, versione **0.7.0**.
 Pacchetto e repository GitHub si chiamano entrambi `dsh-additions` (il repository
-è stato rinominato il 26/11; la cartella locale resta `I:\src\dsh-chatshifter`).
+è stato rinominato il 26/11; la cartella locale resta
+`C:\Users\m.soricetti\Documents\GitHub\dsh-chatshifter`).
 Il backlog per la 1.0.0 è in [TODO.md](TODO.md).
 
 ## Obiettivo
 
 Comandi e pannelli per DeepSeek Harness, ospitati in un solo plugin: `/quit`
 ferma il processo dal composer, lo spostamento di una chat in un altro workspace
-resta la funzione storica nata come `dsh-chatshifter`, e le statistiche dei
+resta la funzione storica nata come `dsh-chatshifter`, le statistiche dei
 workspace (dimensione, directory, file, righe di codice e di documentazione)
-alimentano il pannello destro «Workspace».
+alimentano il pannello destro «Workspace», e i **segnali sonori** di fine turno
+e richiesta di autorizzazione hanno una **pagina di configurazione** nel plugin.
 
-## Stato: 0.6.0 installata — segnali sonori, pannello «Workspace», /quit
+## Stato: 0.7.0 — namespace `additions` e pagina di configurazione dei suoni
+
+`dsh-additions` v0.7.0 è nel profilo `web` come **link** al checkout (la
+dipendenza nel profilo si chiama ancora `dsh-chatshifter`, alias storico: il
+bundle è lo stesso e la riga `additions` è `active`). Il pacchetto dichiara il
+namespace di impostazioni `additions` e la metà browser registra la sua pagina in
+`plugins.row.config`.
+
+Verificato il 27/11 (DSH 0.2.2-rc.1, pnpm 12.23):
+
+```text
+test:      71/71 unitari verdi (26 bundle, 15 host, 9 /quit, 9 statistiche, 10 suoni + schema)
+schema:    SettingsForms.volatileForm(Config) proietta { sounds: { enabled, ding, approval } }
+describe:  settings/describe serve {"ns":"additions","autoGenerate":true,...}
+           value/base = {"sounds":{"enabled":true,"ding":"","approval":""}}, user {}
+scrittura: settings/mutate ha puntato sounds.ding a un WAV -> /api/additions.info e la rotta
+           del suono l'hanno visto subito (config volatile, nessun remount)
+ripristino: settings/mutate con unset -> patch del profilo tornato pulito (riga additions rimossa)
+host:      GET /api/additions.info -> 200, version 0.7.0
+bundle:    /plugins/??dsh-additions/client.js&rev=9c570359ecef -> 200 (busta con la pagina)
+pacchetto: dist/dsh-additions-0.7.0.tgz — 12 file, 119,7 kB, sha1 9ddc4d7f…
+```
+
+Non provato a video: la pagina nella UI (apertura, caselle, Salva) e l'effetto
+udibile di un cambio file a pagina aperta. La logica è coperta dai test e la
+catena host è verificata via RPC autenticata.
+
+## Meccanica delle impostazioni (0.7.0) — fatti
+
+1. **Il namespace è l'entry id del Loader** (`additions`), non un nome da
+   registrare. Serve solo esportare `Config` dal modulo host: `settings.describe()`
+   include le entry attive che hanno una `volatileForm` non vuota.
+2. **Solo i campi `.volatile()` compaiono e sono scrivibili**:
+   `volatileForm` percorre lo schema e tiene i nodi con `meta.volatile`; gli
+   altri campi restano config del bundle. Nel nostro schema: `sounds.enabled`,
+   `sounds.ding`, `sounds.approval`; `volume` è ordinario (solo patch).
+3. **I campi volatili arrivano al plugin come riferimenti, non valori**:
+   `createVolatile` (cosmokit) produce `{ get(), [Symbol.for('cosmokit.volatile.write')] }`.
+   Leggere `config.sounds.ding` una volta sola congela il valore: serve
+   `readLive()` e leggere a ogni uso (la rotta del suono lo fa per richiesta).
+4. **La pagina vive in `plugins.row.config`**, keyed `<package name>#<row id>`.
+   Il row id è `additions`; il package name è quello del *bundle nel profilo*:
+   con l'alias attuale `dsh-chatshifter` → `dsh-chatshifter#additions`, con
+   un'installazione pulita `dsh-additions#additions`. Registriamo entrambe le
+   chiavi; solo quella giusta viene aperta. La riga del bundle guadagna il
+   pulsante di configurazione solo se la chiave è registrata (`configLedger`).
+5. **La pagina riceve `form` dal proprietario** (`{ state, mutate }`) ma noi
+   usiamo `ctx.configForms.get('additions')` iniettato come hook: stessa istanza,
+   valori accettati e coda di scrittura condivisa. `mutate` accetta path annidati
+   (`['sounds','ding']`), `set`/`unset` solo campi di primo livello.
+6. **La scrittura salva la configurazione completa della riga** nel patch del
+   profilo: `strip(raw)` toglie i volatili, `mergeLayers` rimette i nuovi → i
+   campi ordinari (`archiveSource`, `quit`, `stats`, `sounds.volume`) restano.
+   Quando il layer utente torna vuoto (unset), il config editor **rimuove** la
+   riga.
+7. **`configForms` è opzionale**: iniettato con `ctx.inject`, così un host senza
+   il servizio impostazioni mantiene menu/pannello/suoni e usa `/api/additions.info`
+   come fallback.
+8. **Schemastery è una dipendenza vera** (`@deepseek-ai/schemastery ~3.19.0`):
+   è la libreria con cui DSH costruisce le form. L'import è protetto da
+   try/catch in top-level await: senza pacchetto il plugin si carica, `Config`
+   resta `undefined` e la pagina non compare (con un warning nel log host).
+9. **La cache del player è per cue *e* percorso**: `configure()` invalida il
+   buffer del cue quando il percorso cambia, e l'URL porta `&v=<percorso>`;
+   senza questo, cambiare file nella pagina non si sarebbe sentito fino al reload.
+10. **Gli errori di scrittura** (`settings/conflict`, rifiuto del host) lasciano
+    il valore accettato visibile e mostrano il messaggio nella pagina; il server
+    rifiuta una `expectedRevision` stantia, quindi la pagina non deve fissarla.
+11. **Riavvio della voce**: dopo una modifica a `lib/index.js` serve disabilitare/
+    riabilitare la riga `additions` (o riavviare DSH). Per il bundle client vale
+    la scoperta 6 della 0.2.0 (revisione per metadati del file).
+
+## Stato storico: 0.6.0 — segnali sonori, pannello «Workspace», /quit
 
 `dsh-additions` v0.6.0 è nel profilo `web` come **tarball** (`file:` a
 `dist/dsh-additions-0.6.0.tgz`), la riga `additions` del loader compone
@@ -326,19 +400,19 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 
 | Percorso | Ruolo |
 |---|---|
-| `lib/index.js` | host: comando `/quit` registrato, lettura sorgente, clone persistito, attach, archive, rotte `/api/additions.*` (move, info, workspace-stats, sound) |
+| `lib/index.js` | host: `Config` (schema del namespace `additions`), comando `/quit`, lettura sorgente, clone persistito, attach, archive, rotte `/api/additions.*` (move, info, workspace-stats, sound) |
 | `lib/quit.js` | host: `/quit`, scheduler dello spegnimento (interrupt + watchdog), config `quit` |
-| `lib/sounds.js` | host: risoluzione dei due cue (asset impacchettati o percorso configurato), tipi MIME e rotta `SOUND_PATH` |
+| `lib/sounds.js` | host: risoluzione dei due cue (asset impacchettati o percorso configurato), `readLive()` per i campi volatili, tipi MIME e rotta `SOUND_PATH` |
 | `lib/workspace-stats.js` | host: scansione di un workspace (byte, directory, file, righe codice/doc), limiti e rotta `STATS_PATH` |
 | `assets/ding.wav`, `assets/uh-oh.wav` | i due suoni predefiniti, sintetizzati (16-bit mono 22 kHz) |
-| `lib/client.js` | browser: bundle a mano su `ctx.slots` — voce «Sposta nel workspace…», dialog, tab «Workspace», watcher dei segnali sonori (namespace `additions`) |
+| `lib/client.js` | browser: bundle a mano su `ctx.slots` — voce «Sposta nel workspace…», dialog, tab «Workspace», watcher dei segnali sonori, pagina di configurazione dei suoni in `plugins.row.config` |
 | `cordis.patch.yml` | riga `insert` del bundle nel profilo (config `archiveSource`, `quit`, `stats`, `sounds`) |
 | `package.json` | bundle + `dsh.client` + export `./client` |
 | `tests/host.test.js` | 15 test host con persistenza/registry finti |
 | `tests/quit.test.js` | 9 test del comando: config, ordine interrupt/watchdog, idempotenza, annullamento, argomenti rifiutati |
-| `tests/sounds.test.js` | 7 test dei segnali: config, validità dei WAV (header), file sostituito, fallback, rotta e info |
+| `tests/sounds.test.js` | 10 test dei segnali: config, riferimenti volatili, schema `Config`, validità dei WAV (header), file sostituito, fallback, rotta (anche live) e info |
 | `tests/stats.test.js` | 9 test delle statistiche: fixture su disco, CRLF/binari, budget, risoluzione target, rotta e cache |
-| `tests/client.test.js` | 19 test del bundle browser (vm, `window.__ModuleLoader__`): registrazioni slot, controller, transizioni dei segnali, player audio, dizionari |
+| `tests/client.test.js` | 26 test del bundle browser (vm, `window.__ModuleLoader__`): registrazioni slot, controller, transizioni dei segnali, player audio, pagina delle impostazioni, dizionari |
 | `scripts/make-sounds.mjs` | rigenera i due WAV (sintesi a partiali, nessun campione di terzi) |
 | `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura (preferendo una con watermark), sposta a freddo e a caldo, riapre la copia |
 | `scripts/repro-delivery.mjs` | riproduce il guasto dei marker di consegna su una sessione reale (diagnostica) |
@@ -353,6 +427,9 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 ## Come riprendere
 
 ```powershell
+# dipendenze (una volta: @deepseek-ai/schemastery, la libreria di schema di DSH)
+npm install
+
 # test (sempre con isolation none sotto sandbox DSH)
 npm test
 
@@ -368,23 +445,37 @@ dsh plugin --profile web why dsh-additions
 # oppure, dall'agente: plugin_manager list_plugins / list_bundles
 ```
 
-Per aggiornare il plugin nel profilo live: una voce **nuova** entra nel grafo
-solo al riavvio di DSH (il server legge i bundle del profilo al boot). Il tipo
-di installazione decide il resto: con il tarball serve rifare `npm pack` e
-reinstallare; con `link:` il codice del checkout è già nel profilo, ma la voce
-va comunque riavviata (toggle dalla pagina Plugin o riavvio DSH); per il client
-vedi la scoperta 6.
+Per aggiornare il plugin nel profilo live: con `link:` il codice del checkout è
+già nel profilo; dopo una modifica alla metà host (o alla patch) la voce
+`additions` va disabilitata e riabilitata dalla pagina Plugin. Per la metà
+browser vale la revisione per metadati: anche lì serve il toggle della voce (il
+solo reload della pagina non rilegge il bundle). Una voce **nuova** (o
+reinstallata con un altro nome) entra nel grafo solo se il profilo è live e HMR
+la ricompone; in caso contrario serve riavviare `dsh web`.
+
+Attenzione all'ambiente (27/11): il profilo `web` è installato con pnpm 10 ma il
+`pnpm` ora in PATH è **12.23** e vuole lo store `v11` → ogni operazione di
+pacchetto (`plugin_manager remove_bundle`/`install_bundle`, `dsh plugin add`)
+fallisce con `ERR_PNPM_UNEXPECTED_STORE` finché non si esegue `pnpm install` nel
+profilo (migra `node_modules` e lockfile). Per questo la 0.7.0 resta un
+`link:` e non è stata reinstallata come tarball.
 
 Si riparte da [TODO.md](TODO.md), dai P0.
 
 ## Prossimi passi
 
-La 0.5.3 è installata e le superfici sono state verificate a video il 25/11. In
-ordine:
-
-1. **`/quit` a video**: è l'unica cosa non ancora provata (interrompe il server,
-   va fatto quando la sessione non serve);
-2. **pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
-   e/o il repository GitHub, oggi privato; poi lo smoke test in un profilo pulito;
-3. riprendere il backlog P0 di [TODO.md](TODO.md): validazione della copia prima
+1. **Pagina delle impostazioni a video** (27/11): aprire Plugins →
+   `dsh-additions` → riga `additions` → configurazione; provare la casella, le
+   due caselle di testo, Salva e l'effetto udibile di un file sostituito a
+   pagina aperta.
+2. **Migrare il profilo all'alias giusto** (`dsh-additions` invece di
+   `dsh-chatshifter`) dopo aver risolto lo store pnpm: `pnpm install` nel
+   profilo, poi `plugin_manager remove_bundle dsh-chatshifter` e
+   `install_bundle` del tarball `dist/dsh-additions-0.7.0.tgz`. Oggi la pagina
+   funziona comunque perché registriamo entrambe le chiavi.
+3. **`/quit` a video**: interrompe il server, va fatto quando la sessione non
+   serve.
+4. **Pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
+   e/o il repository GitHub, oggi privato; poi lo smoke test in un profilo pulito.
+5. Riprendere il backlog P0 di [TODO.md](TODO.md): validazione della copia prima
    dell'archiviazione, gestione delle chat in esecuzione, idempotenza.
