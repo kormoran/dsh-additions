@@ -104,12 +104,19 @@ tempo basta).
 
 ## P1 — qualità e test
 
-- [ ] **Ambiente: store pnpm del profilo disallineato** (27/11). `node_modules`
-      del profilo `web` è legato allo store pnpm `v10`, ma il `pnpm` in PATH è
-      12.23 e vuole `v11`: ogni operazione di pacchetto fallisce con
-      `ERR_PNPM_UNEXPECTED_STORE` (rimozione/installazione bundle comprese). Va
-      eseguito `pnpm install` nel profilo per migrare, poi si può reinstallare il
-      tarball e rinominare la dipendenza `dsh-chatshifter` → `dsh-additions`.
+- [x] **Ambiente: store pnpm del profilo disallineato** (27/11, risolto).
+      Causa: due pnpm in PATH — il profilo era installato con la 10.34.9
+      (store `v10`), ma `%LOCALAPPDATA%\pnpm\bin` (12.23, store `v11`) veniva
+      prima della copia npm-global 10.34.9. Ogni add/remove falliva con
+      `ERR_PNPM_UNEXPECTED_STORE`. Rimedio applicato: `pnpm install` nel
+      profilo (lockfile v9 e versioni invariati), verifica con
+      `--frozen-lockfile` e con una `remove` reale su una copia.
+  - [ ] **Pulizia macchina**: `npm rm -g pnpm` per eliminare la copia 10.34.9
+        rimasta in `%APPDATA%\npm` (va fatta a mano, fuori dall'agente).
+  - [ ] Nota per il futuro: a ogni major di pnpm (store `vN` → `vN+1`) serve un
+        `pnpm install` nel profilo, altrimenti `plugin_manager add/remove` si
+        blocca di nuovo.
+
 - [ ] **CI** su `windows-latest`, `ubuntu-latest`, `macos-latest`; Node 20 e 22.
 - [ ] Test ermetici (fixture, non sessioni reali dell'utente) + integrazione JSONL con root temporanea.
 - [ ] Test aggiuntivi: allegati/immagini, chat molto lunga (≥10k eventi), doppio spostamento, route non autorizzata (401/403), cambio lingua.

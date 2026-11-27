@@ -36,6 +36,9 @@ ripristino: settings/mutate con unset -> patch del profilo tornato pulito (riga 
 host:      GET /api/additions.info -> 200, version 0.7.0
 bundle:    /plugins/??dsh-additions/client.js&rev=9c570359ecef -> 200 (busta con la pagina)
 pacchetto: dist/dsh-additions-0.7.0.tgz — 12 file, 119,7 kB, sha1 9ddc4d7f…
+pnpm:      profilo migrato a pnpm 12.23/store v11; `pnpm install` 19,5 s, lockfile v9
+           invariato (solo il link di dsh-locale-it allineato), `pnpm install --frozen-lockfile`
+           no-op in 74 ms, una `pnpm remove` reale in una copia ha funzionato in 1,3 s
 ```
 
 Non provato a video: la pagina nella UI (apertura, caselle, Salva) e l'effetto
@@ -453,12 +456,20 @@ solo reload della pagina non rilegge il bundle). Una voce **nuova** (o
 reinstallata con un altro nome) entra nel grafo solo se il profilo è live e HMR
 la ricompone; in caso contrario serve riavviare `dsh web`.
 
-Attenzione all'ambiente (27/11): il profilo `web` è installato con pnpm 10 ma il
-`pnpm` ora in PATH è **12.23** e vuole lo store `v11` → ogni operazione di
-pacchetto (`plugin_manager remove_bundle`/`install_bundle`, `dsh plugin add`)
-fallisce con `ERR_PNPM_UNEXPECTED_STORE` finché non si esegue `pnpm install` nel
-profilo (migra `node_modules` e lockfile). Per questo la 0.7.0 resta un
-`link:` e non è stata reinstallata come tarball.
+Attenzione all'ambiente (risolto il 27/11): il profilo era legato allo store
+pnpm `v10` (installato con pnpm 10.34.9) mentre il `pnpm` in PATH era la
+**12.23.0 standalone** (`%LOCALAPPDATA%\pnpm\bin`, store `v11`), e c'era ancora
+la copia npm-global 10.34.9 (`%APPDATA%\npm\pnpm`) più indietro nel PATH. Ogni
+operazione di pacchetto (add/remove) falliva con `ERR_PNPM_UNEXPECTED_STORE`.
+Rimedio: `pnpm install` nel profilo (19,5 s), che ricrea `node_modules` contro
+lo store v11 — lockfile v9 invariato, nessun aggiornamento di versione, solo il
+link di `dsh-locale-it` allineato al `package.json`; poi `pnpm install
+--frozen-lockfile` no-op e una `remove` di prova riuscita. Backup dei manifest
+in `.tmp/profile-backup/`. Resta da fare (a mano, fuori dall'agente):
+`npm rm -g pnpm` per togliere la copia 10.34.9 e lasciare un solo pnpm.
+**Lezione**: a ogni cambio di major di pnpm (store `vN` → `vN+1`) va eseguito
+un `pnpm install` in ogni albero gestito da pnpm (profilo incluso), altrimenti
+add/remove si bloccano finché non lo si fa.
 
 Si riparte da [TODO.md](TODO.md), dai P0.
 
@@ -469,10 +480,10 @@ Si riparte da [TODO.md](TODO.md), dai P0.
    due caselle di testo, Salva e l'effetto udibile di un file sostituito a
    pagina aperta.
 2. **Migrare il profilo all'alias giusto** (`dsh-additions` invece di
-   `dsh-chatshifter`) dopo aver risolto lo store pnpm: `pnpm install` nel
-   profilo, poi `plugin_manager remove_bundle dsh-chatshifter` e
-   `install_bundle` del tarball `dist/dsh-additions-0.7.0.tgz`. Oggi la pagina
-   funziona comunque perché registriamo entrambe le chiavi.
+   `dsh-chatshifter`): ora che pnpm è migrato, `plugin_manager remove_bundle
+   dsh-chatshifter` e `install_bundle` del tarball `dist/dsh-additions-0.7.0.tgz`
+   dovrebbero funzionare. Oggi la pagina funziona comunque perché registriamo
+   entrambe le chiavi; la rinomina serve a togliere l'ambiguità.
 3. **`/quit` a video**: interrompe il server, va fatto quando la sessione non
    serve.
 4. **Pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
