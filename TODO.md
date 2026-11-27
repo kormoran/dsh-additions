@@ -56,9 +56,8 @@ tempo basta).
         (oggi lo mostra solo l'uso senza argomento).
 
 - [ ] **`/quit` — comportamento con lavoro in corso**
-  - [ ] Decidere se rifiutare quando un turno è aperto o job sono attivi, o
-        documentare che li interrompe (oggi: li interrompe, il log resta
-        rileggibile al resume).
+  - [x] Scelta: **interrompe** (deciso 27/11). Il comando deve funzionare sempre;
+        il log resta rileggibile al resume e il README lo documenta.
   - [ ] Verifica a video del comando dopo il riavvio di `dsh web`.
 
 - [x] **Rinomina del repository**
@@ -71,45 +70,45 @@ tempo basta).
         `dsh-commander` (occupato da `yusi5587`) e `dsh-toys` (troppo vicino a
         `dsh-toy`, plugin esistente).
 
-- [ ] **Validare la copia prima di archiviare l'originale**
-  - [ ] Dopo `writeClone`, riaprire la nuova sessione in sola lettura e leggere tutti gli eventi.
-  - [ ] Confrontare lunghezza, seq dense, tipi, `isSeeded`/cut e marker `delivery-accepted` con la sorgente.
-  - [ ] Se la verifica fallisce: non chiamare `archiveSession`, restituire un errore dedicato e fare cleanup della copia.
-  - [ ] Test: copia con marker sbagliato, evento mancante, log illeggibile → l'originale non viene archiviato.
+- [x] **Validare la copia prima di archiviare l'originale** (0.9.0)
+  - [x] Dopo `writeClone`, riaprire la nuova sessione in sola lettura e leggere tutti gli eventi.
+  - [x] Confrontare lunghezza, seq dense, tipi, timestamp, `isSeeded`/cut e marker `delivery-accepted` con la copia scritta.
+  - [x] Se la verifica fallisce: `clone-invalid`, nessuna `archiveSession`, cleanup best-effort (solo percorsi assoluti).
+  - [x] Test: evento mancante → la copia non viene registrata né l'originale archiviato; integrazione reale su 1.322 eventi.
 
-- [ ] **Chat in esecuzione / job attivi**
-  - [ ] Decidere il comportamento: rifiutare (`source-busy`) oppure fermare la sorgente e aspettare la quiescenza prima dello snapshot.
-  - [ ] Host: rilevare turno in corso e job attivi; non archiviare in caso di rifiuto.
-  - [ ] Client: voce disabilitata con motivo localizzato.
-  - [ ] Test: sorgente viva con turno aperto e con job registrato non concluso.
+- [x] **Chat in esecuzione / job attivi** (0.9.0)
+  - [x] Scelta: **rifiutare** (`source-busy`, 409) senza toccare nulla.
+  - [x] Host: waterfall `workspace/session-activity` (turno, subagenti, job, promemoria) prima della copia.
+  - [x] Client: preflight `GET /api/additions.preflight` all'apertura del dialog, motivo localizzato; la riga di menu resta sempre visibile (motivo mostrato nel dialog).
+  - [x] Test: sorgente con turno e con job registrato; preflight per subagente/vuota/inesistente.
 
-- [ ] **Fallimenti parziali, retry e idempotenza**
-  - [ ] Se `attachSession` fallisce, cleanup best-effort della copia (o report esplicito di orfano).
-  - [ ] Lock per sessione sorgente: due richieste concorrenti non devono creare due copie.
-  - [ ] Idempotenza per `requestId` (stesso input → stessa copia) o risposta che indichi il duplicato.
-  - [ ] Test: attach fallito, doppio click, retry dopo timeout.
+- [x] **Fallimenti parziali, retry e idempotenza** (0.9.0)
+  - [x] `attachSession` fallito: cleanup best-effort della copia + `attach-failed` con id e motivo.
+  - [x] Lock per sessione sorgente (`move-in-progress`).
+  - [x] Idempotenza per `requestId` (stesso id → stessa copia; i fallimenti si possono ritentare).
+  - [x] Test: attach fallito, doppia richiesta concorrente, replay del requestId.
 
-- [ ] **Audit completo delle identità nel log copiato**
-  - [ ] Decidere per `job/registered` e `job/settled` con `owner` della sorgente: riscrivere o esentare documentando.
-  - [ ] Verificare `subagent/catalog` e ogni altro campo che contiene un id di sessione.
-  - [ ] Test generico: nessun id della sorgente negli eventi della copia fuori dal prefisso ereditato (salvo esenzioni motivate).
+- [x] **Audit completo delle identità nel log copiato** (0.9.0)
+  - [x] `job/registered`/`job/settled`: **esentati** — il contratto del formato dice che la storia copiata non trasferisce l'esecuzione; `owner` resta la sorgente.
+  - [x] `subagent/catalog`: nomina le sessioni figlie, esentato; il resto del log è testo o riferimenti altrui.
+  - [x] Test con delivery marker, job, catalog e testo che cita l'id: solo il marker viene ri-puntato. Audit su log reali: solo delivery (`sessionId`) e job (`owner`).
 
-- [ ] **Path, id e formati multipiattaforma**
-  - [ ] `isSameDirectory`: confronto consapevole della piattaforma (case-sensitive su Linux) o identità del file.
-  - [ ] `realpath`/`stat` per symlink e path non risolvibili.
-  - [ ] Validare l'id sessione (niente separatori di path, formato atteso) prima di usarlo.
-  - [ ] Sessioni v0–v3: testare il clone o rifiutare con errore chiaro; non scrivere header incoerenti.
-  - [ ] Test su Windows, Linux e macOS.
+- [ ] **Path, id e formati multipiattaforma** (0.9.0, parziale)
+  - [x] Confronto directory consapevole della piattaforma (`pathsEqual`: case-insensitive su Windows/macOS).
+  - [x] `realpath`/`stat` già usati per symlink e path non risolvibili (canonicalizzazione con fallback).
+  - [x] Id sessione validato (niente spazi, caratteri di controllo o separatori di percorso).
+  - [x] Header senza versione di formato valida → `unsupported-format`; i log v0–v3 sono tradotti in memoria dal backend e la copia nasce nella versione logica corrente.
+  - [ ] Test su Windows, Linux e macOS (serve CI).
 
-- [ ] **Contratto di compatibilità DSH**
-  - [ ] Dichiarare `engines.dsh` (es. `>=0.2.2-rc.1 <0.3.0`) e le eventuali peer dependency.
-  - [ ] Elencare le API interne usate (`contextMenus`, `workspaces.list`, `sessions.refresh`, `workspaceRegistry`, `sessionPersistence`, `locale`).
-  - [ ] Matrice testata: versione DSH corrente + una successiva; documentare cosa può rompersi.
+- [x] **Contratto di compatibilità DSH** (0.9.0)
+  - [x] `engines.dsh` = `>=0.2.2-rc.1 <0.3.0-0`.
+  - [x] API host/client elencate nel README (sezione «Compatibilità»).
+  - [x] Matrice testata: DSH 0.2.2-rc.1 su Windows; una versione successiva resta da provare.
 
 - [ ] **Bug UX noti**
-  - [ ] Archiviando la chat aperta, il client deve deselezionarla/chiudere la vista come fa Archive nativo.
-  - [ ] Titolo garantito anche per le copie fork-derived senza `session/title` (fallback dal primo messaggio).
-  - [ ] Voce disabilitata per chat vuote, subagenti e chat in esecuzione.
+  - [ ] Archiviando la chat aperta, il client deve deselezionarla/chiudere la vista come fa Archive nativo: non esiste un'API pubblica per la selezione corrente, documentato nei limiti.
+  - [ ] Titolo garantito anche per le copie fork-derived senza `session/title`: documentato con la workaround `/rename` (il servizio titoli esclude le sessioni seed e la copia non è viva).
+  - [x] Chat non spostabili: motivo localizzato nel dialog tramite preflight (la riga di menu non può essere disabilitata senza una chiamata al host al render).
 
 ## P1 — qualità e test
 

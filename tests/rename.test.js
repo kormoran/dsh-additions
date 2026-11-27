@@ -157,7 +157,7 @@ test('apply registers /rename beside /quit when the title service is composed', 
   apply(harness.ctx, {})
   const names = harness.definitions.map((definition) => definition.name).sort()
   assert.deepEqual(names, ['quit', 'rename'])
-  assert.equal(harness.routes.length, 4, 'the four authenticated routes stay registered')
+  assert.equal(harness.routes.length, 5, 'the five authenticated routes stay registered')
 
   const rename = harness.definitions.find((definition) => definition.name === 'rename')
   const result = invoke(rename, 'Da apply')
@@ -170,5 +170,5 @@ test('without the title service the rest of the host half still loads', () => {
   delete harness.ctx.sessionTitle
   apply(harness.ctx, {})
   assert.deepEqual(harness.definitions.map((definition) => definition.name), ['quit'])
-  assert.equal(harness.routes.length, 4)
+  assert.equal(harness.routes.length, 5)
 })

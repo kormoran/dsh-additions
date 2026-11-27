@@ -216,8 +216,10 @@ function createClient(options = {}) {
 function jsonFetch(payload, status = 200) {
   const stub = async (url, init) => {
     stub.last = { url, init }
+    stub.calls.push({ url, init })
     return { ok: status >= 200 && status < 300, status, json: async () => payload }
   }
+  stub.calls = []
   return stub
 }
 
@@ -298,7 +300,7 @@ test('apply registers the Session menu row, the dialog and the workspace panel',
   assert.equal(typeof dialogProps.pickFolder, 'function')
 })
 
-test('the controller opens on a session and closes without a move', () => {
+test('the controller opens on a session and closes without a move', async () => {
   const { exports } = loadBundle()
   const controller = exports.__controller({ fetcher: jsonFetch({ ok: true }), refresh: () => {} })
 
@@ -308,9 +310,12 @@ test('the controller opens on a session and closes without a move', () => {
   assert.equal(opened.open, true)
   assert.equal(opened.sessionId, 'session-source')
   assert.equal(opened.title, 'La mia chat')
-  assert.equal(opened.phase, 'pick')
+  assert.equal(opened.phase, 'checking', 'the preflight runs before the picker')
   assert.equal(opened.workspaceTitle, null)
   assert.equal(opened.error, null)
+
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  assert.equal(controller.store.getSnapshot().phase, 'pick')
 
   controller.close()
   assert.equal(controller.store.getSnapshot().open, false)
@@ -322,6 +327,84 @@ test('a chat without an id cannot open the dialog', () => {
   assert.equal(controller.open('', 'x'), false)
   assert.equal(controller.open(undefined, 'x'), false)
   assert.equal(controller.store.getSnapshot().open, false)
+})
+
+test('the preflight blocks a working chat and reports the reason', async () => {
+  const { exports } = loadBundle()
+  const fetcher = async (url) => {
+    fetcher.last = { url }
+    if (url.startsWith('/api/additions.preflight')) {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          movable: false,
+          code: 'source-busy',
+          message: 'This chat is running: finish or stop its work before moving it.',
+        }),
+      }
+    }
+    return { ok: true, json: async () => ({ ok: true, sessionId: 'session-clone' }) }
+  }
+  const controller = exports.__controller({ fetcher, refresh: () => {} })
+  controller.open('session-source', 'Chat')
+  await new Promise((resolve) => setTimeout(resolve, 5))
+
+  const state = controller.store.getSnapshot()
+  assert.equal(state.phase, 'blocked')
+  assert.equal(state.blocked.code, 'source-busy')
+  assert.equal(fetcher.last.url, '/api/additions.preflight?sessionId=session-source')
+})
+
+test('a failed preflight falls through to the picker', async () => {
+  const { exports } = loadBundle()
+  let calls = 0
+  const controller = exports.__controller({
+    fetcher: async () => {
+      calls += 1
+      throw new Error('offline')
+    },
+    refresh: () => {},
+  })
+  controller.open('session-source', 'Chat')
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  assert.equal(controller.store.getSnapshot().phase, 'pick')
+  assert.equal(calls, 1)
+})
+
+test('the dialog localizes known refusal codes and falls back to the host text', () => {
+  const { exports } = loadBundle()
+  const { reasonText } = exports.__move
+  const t = (key) => `t:${key}`
+  assert.equal(reasonText(t, { code: 'source-busy', message: 'busy' }), 't:reason.busy')
+  assert.equal(reasonText(t, { code: 'move-in-progress', message: 'x' }), 't:reason.inProgress')
+  assert.equal(reasonText(t, { code: 'same-workspace', message: 'English text' }), 'English text')
+  assert.equal(reasonText(t, undefined), '')
+})
+
+test('the dialog renders the localized blocked state', () => {
+  const { exports } = loadBundle()
+  const state = {
+    open: true,
+    sessionId: 'session-source',
+    title: 'Chat',
+    phase: 'blocked',
+    workspaceTitle: null,
+    error: null,
+    errorCode: null,
+    blocked: { code: 'empty-session', message: 'The chat is empty.' },
+  }
+  const element = exports.__components.MoveDialog({
+    t: (key, params) => (params === undefined ? key : `${key}:${params.reason}`),
+    useMoveState: (selector) => selector(state),
+    useWorkspaces: (selector) => selector({ items: [] }),
+    moveTo: () => {},
+    close: () => {},
+    pickFolder: async () => null,
+  })
+  const body = element.props.children
+  assert.equal(body.type, 'p')
+  assert.match(body.props.children, /blocked:.*reason\.empty/u)
 })
 
 test('moving to a workspace posts the captured chat and refreshes', async () => {
@@ -340,10 +423,10 @@ test('moving to a workspace posts the captured chat and refreshes', async () => 
   assert.equal(phase, 'done')
   assert.equal(fetcher.last.url, '/api/additions.move')
   assert.equal(fetcher.last.init.method, 'POST')
-  assert.deepEqual(JSON.parse(fetcher.last.init.body), {
-    sessionId: 'session-source',
-    workspaceId: 'ws-beta',
-  })
+  const body = JSON.parse(fetcher.last.init.body)
+  assert.equal(body.sessionId, 'session-source')
+  assert.equal(body.workspaceId, 'ws-beta')
+  assert.equal(typeof body.requestId, 'string')
   assert.equal(refreshes, 1)
 
   const state = controller.store.getSnapshot()
@@ -359,10 +442,10 @@ test('moving to a chosen folder posts a target path', async () => {
   controller.open('session-source', 'Chat')
 
   await controller.moveTo({ targetPath: 'C:\\picked folder', label: 'C:\\picked folder' })
-  assert.deepEqual(JSON.parse(fetcher.last.init.body), {
-    sessionId: 'session-source',
-    targetPath: 'C:\\picked folder',
-  })
+  const body = JSON.parse(fetcher.last.init.body)
+  assert.equal(body.sessionId, 'session-source')
+  assert.equal(body.targetPath, 'C:\\picked folder')
+  assert.equal(typeof body.requestId, 'string')
   assert.equal(controller.store.getSnapshot().workspaceTitle, 'scelta')
 })
 
@@ -402,7 +485,8 @@ test('a move without a destination or session is a no-op', async () => {
   assert.equal(await controller.moveTo({ workspaceId: 'ws-beta' }), undefined)
   controller.open('session-source', 'Chat')
   assert.equal(await controller.moveTo(undefined), undefined)
-  assert.equal(fetcher.last, undefined)
+  assert.equal(fetcher.calls.filter((call) => call.url === '/api/additions.move').length, 0)
+  await new Promise((resolve) => setTimeout(resolve, 5))
   assert.equal(controller.store.getSnapshot().phase, 'pick')
 })
 

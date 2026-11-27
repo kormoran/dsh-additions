@@ -49,10 +49,21 @@ const writer = new Context()
 await writer.plugin(SessionStore)
 await writer.plugin(JsonlPersistence, { root: join(workRoot, 'session-root') })
 
+/** Sessions this run created in the temporary root (clones). */
+const created = new Set()
+
 /** Read through the real root, write through the temporary one. */
 const persistence = {
-  create: (header, options) => writer.sessionPersistence.create(header, options),
-  open: (id, access, options) => (access === 'read' ? reader.sessionPersistence.open(id, access, options) : writer.sessionPersistence.open(id, access, options)),
+  create: (header, options) => {
+    created.add(String(header.id))
+    return writer.sessionPersistence.create(header, options)
+  },
+  open: (id, access, options) => {
+    if (access === 'read' && !created.has(String(id))) {
+      return reader.sessionPersistence.open(id, access, options)
+    }
+    return writer.sessionPersistence.open(id, access, options)
+  },
   async stat(id, options) {
     const own = await writer.sessionPersistence.stat(id, options)
     if (own !== undefined) return own

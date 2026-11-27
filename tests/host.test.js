@@ -1,10 +1,24 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, realpath, rm, stat } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
 
-import { MOVE_PATH, INFO_PATH, MoveError, apply, buildHeader, performMove, reidentifyDeliveryMarkers } from '../lib/index.js'
+import {
+  INFO_PATH,
+  MOVE_PATH,
+  MoveError,
+  PREFLIGHT_PATH,
+  apply,
+  buildHeader,
+  createMoveEngine,
+  pathsEqual,
+  performMove,
+  preflightMove,
+  reidentifyDeliveryMarkers,
+} from '../lib/index.js'
+import { cleanupClone } from '../lib/move.js'
 import { SOUND_PATH } from '../lib/sounds.js'
 import { STATS_PATH } from '../lib/workspace-stats.js'
 
@@ -152,6 +166,9 @@ async function harness(options = {}) {
     sessionPersistence: persistence,
     workspaceRegistry: registry,
     logger: { warn() {} },
+    // The activity waterfall is what the registry's archive admission uses;
+    // tests declare the reported families per case.
+    waterfall: (name, request, next) => Promise.resolve(options.activity ?? next?.() ?? []),
   }
 
   const sourceWorkspace = await registry.create(sourceDir)
@@ -222,6 +239,7 @@ test('moving a live chat writes a new persisted log under the target workspace',
     assert.equal(result.workspacePath, parts.targetWorkspace.path)
     assert.equal(result.events, 3)
     assert.equal(result.archived, true)
+    assert.equal(result.validated, true)
 
     const stored = await parts.persistence.stat(result.sessionId)
     assert.ok(stored, 'the clone is visible through persistence')
@@ -278,7 +296,9 @@ test('moving a cold chat reads its log through persistence without write ownersh
       workspaceId: parts.targetWorkspace.id,
     })
 
-    assert.deepEqual(opened, [{ id: 'session-cold', access: 'read' }])
+    assert.equal(opened[0].id, 'session-cold')
+    assert.equal(opened[0].access, 'read')
+    assert.ok(opened.length >= 2, 'the clone is re-opened for validation')
     assert.equal(result.source.live, false)
     assert.equal(result.events, 2)
     assert.equal(result.archived, false)
@@ -464,7 +484,10 @@ test('the HTTP routes answer with JSON and map expected refusals', async () => {
     }
     apply(ctx, { archiveSource: true })
 
-    assert.deepEqual([...routes.keys()].sort(), [INFO_PATH, MOVE_PATH, SOUND_PATH, STATS_PATH].sort())
+    assert.deepEqual(
+      [...routes.keys()].sort(),
+      [INFO_PATH, MOVE_PATH, PREFLIGHT_PATH, SOUND_PATH, STATS_PATH].sort(),
+    )
     assert.deepEqual(commands.map((entry) => entry.name), ['quit'], 'the slash command is registered')
 
     const info = await routes.get(INFO_PATH).fetch(new Request(`http://localhost${INFO_PATH}`))
@@ -568,4 +591,206 @@ test('buildHeader keeps the logical format, preserves the fork cut, and carries 
   const plain = buildHeader({ version: 4, id: 'session-a', createdAt: 1, isSeeded: false }, 'session-c', 'C:\\new')
   assert.equal(plain.isSeeded, false)
   assert.equal('agentPreset' in plain, false)
+})
+
+test('preflight reports movability and refuses a working chat without writing', async () => {
+  const idle = await harness({ live: { events: [event(0)] } })
+  try {
+    const result = await preflightMove(idle.ctx, { sessionId: 'session-live' })
+    assert.equal(result.movable, true)
+    assert.equal(result.source.events, 1)
+    assert.equal(idle.persistence.sessions.size, 0, 'preflight never writes')
+    assert.equal(idle.registry.archived.length, 0)
+  } finally {
+    await idle.cleanup()
+  }
+
+  const busy = await harness({ live: { events: [event(0)] }, activity: [{ kind: 'turn' }] })
+  try {
+    const result = await preflightMove(busy.ctx, { sessionId: 'session-live' })
+    assert.equal(result.movable, false)
+    assert.equal(result.code, 'source-busy')
+    assert.deepEqual(result.details.activity, [{ kind: 'turn' }])
+  } finally {
+    await busy.cleanup()
+  }
+})
+
+test('preflight reports the ineligibility codes of the move itself', async () => {
+  const subagent = await harness({ live: { header: { origin: 'subagent' }, events: [event(0)] } })
+  try {
+    assert.equal((await preflightMove(subagent.ctx, { sessionId: 'session-live' })).code, 'subagent-session')
+  } finally {
+    await subagent.cleanup()
+  }
+  const blank = await harness({ live: { events: [] } })
+  try {
+    assert.equal((await preflightMove(blank.ctx, { sessionId: 'session-live' })).code, 'empty-session')
+    assert.equal((await preflightMove(blank.ctx, { sessionId: 'session-missing' })).code, 'session-not-found')
+    assert.equal((await preflightMove(blank.ctx, { sessionId: 'bad/id' })).code, 'invalid-session-id')
+  } finally {
+    await blank.cleanup()
+  }
+})
+
+test('a chat with running work is refused before anything is written', async () => {
+  const parts = await harness({
+    live: { events: [event(0)] },
+    activity: [{ kind: 'turn' }, { kind: 'job', items: [{ id: 'job-1', label: 'build' }] }],
+  })
+  try {
+    await assert.rejects(
+      performMove(parts.ctx, {}, { sessionId: 'session-live', workspaceId: parts.targetWorkspace.id }),
+      (error) =>
+        error instanceof MoveError &&
+        error.code === 'source-busy' &&
+        error.details?.activity?.length === 2,
+    )
+    assert.equal(parts.persistence.sessions.size, 0, 'nothing was written')
+    assert.deepEqual(parts.targetWorkspace.sessionIds, [])
+    assert.equal(parts.registry.archived.length, 0)
+  } finally {
+    await parts.cleanup()
+  }
+})
+
+test('a clone that fails validation is neither attached nor archived', async () => {
+  const parts = await harness({ live: { events: [event(0), event(1)] } })
+  try {
+    const originalOpen = parts.persistence.open.bind(parts.persistence)
+    parts.persistence.open = async (id, access) => {
+      const handle = await originalOpen(id, access)
+      if (access !== 'read' || id === 'session-live') return handle
+      const read = handle.read.bind(handle)
+      return {
+        ...handle,
+        read: async (offset = 0) => {
+          const result = await read(offset)
+          return { ...result, events: result.events.slice(0, -1) }
+        },
+      }
+    }
+
+    await assert.rejects(
+      performMove(parts.ctx, {}, { sessionId: 'session-live', workspaceId: parts.targetWorkspace.id }),
+      (error) =>
+        error instanceof MoveError &&
+        error.code === 'clone-invalid' &&
+        error.details?.reason === 'count' &&
+        error.details?.cleaned === false,
+    )
+    assert.deepEqual(parts.targetWorkspace.sessionIds, [], 'the clone was not attached')
+    assert.equal(parts.registry.archived.length, 0, 'the original was not archived')
+  } finally {
+    await parts.cleanup()
+  }
+})
+
+test('the move engine serializes one chat and answers one requestId once', async () => {
+  const parts = await harness({ live: { events: [event(0)] } })
+  try {
+    const engine = createMoveEngine()
+    const input = { sessionId: 'session-live', workspaceId: parts.targetWorkspace.id, requestId: 'req-1' }
+    const [first, second] = await Promise.all([engine.move(parts.ctx, {}, input), engine.move(parts.ctx, {}, input)])
+    assert.equal(first.sessionId, second.sessionId, 'one request id answers the same copy')
+    assert.equal(parts.persistence.sessions.size, 1, 'only one clone was written')
+
+    const again = await engine.move(parts.ctx, {}, input)
+    assert.equal(again.sessionId, first.sessionId, 'a settled request id is replayed')
+    assert.equal(parts.persistence.sessions.size, 1)
+
+    const pending = engine.move(parts.ctx, {}, { ...input, requestId: 'req-2' })
+    await assert.rejects(
+      engine.move(parts.ctx, {}, { ...input, requestId: 'req-3' }),
+      (error) => error instanceof MoveError && error.code === 'move-in-progress',
+    )
+    await pending
+  } finally {
+    await parts.cleanup()
+  }
+})
+
+test('paths compare the way the platform filesystem does', () => {
+  assert.equal(pathsEqual('C:\\Work\\Chat', 'c:\\work\\chat', 'win32'), true)
+  assert.equal(pathsEqual('/Users/x/Work', '/users/x/work', 'darwin'), true)
+  assert.equal(pathsEqual('/home/x/Work', '/home/x/work', 'linux'), false)
+  assert.equal(pathsEqual('/home/x/Work', '/home/x/Work', 'linux'), true)
+  assert.equal(pathsEqual(undefined, '/x', 'linux'), false)
+})
+
+test('a log without a usable format version is refused', async () => {
+  const parts = await harness({ live: { header: { version: 0 }, events: [event(0)] } })
+  try {
+    await assert.rejects(
+      performMove(parts.ctx, {}, { sessionId: 'session-live', workspaceId: parts.targetWorkspace.id }),
+      (error) => error instanceof MoveError && error.code === 'unsupported-format',
+    )
+  } finally {
+    await parts.cleanup()
+  }
+})
+
+test('cleanupClone removes an absolute artifact and leaves a relative one alone', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'additions-cleanup-'))
+  try {
+    const artifact = join(root, '--cwd--', 'session-x', 'session.v4.jsonl.zstd')
+    await mkdir(dirname(artifact), { recursive: true })
+    await writeFile(artifact, 'bytes')
+    const ctx = {
+      logger: { warn() {} },
+      sessionPersistence: { stat: async () => ({ header: {}, revision: 'r', location: { kind: 'jsonl', path: artifact } }) },
+    }
+    assert.equal(await cleanupClone(ctx, 'session-x'), true)
+    assert.equal(existsSync(artifact), false)
+    assert.equal(existsSync(dirname(artifact)), false, 'the empty session directory is removed')
+
+    const relative = {
+      logger: { warn() {} },
+      sessionPersistence: { stat: async () => ({ location: { path: '<memory>/session-x' } }) },
+    }
+    assert.equal(await cleanupClone(relative, 'session-x'), false)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a copied log keeps job ownership and child identities, and re-points only delivery', async () => {
+  const delivery = {
+    type: 'session-log-deepseek/delivery-accepted',
+    seq: 1,
+    time: 1_700_000_000_001,
+    data: { sessionId: 'session-live', sessionFormatVersion: 4, throughSeq: 0 },
+  }
+  const job = {
+    type: 'job/registered',
+    seq: 2,
+    time: 1_700_000_000_002,
+    data: { jobId: 'job-1', owner: 'session-live', kind: 'pwsh', label: 'build', startedAt: 1 },
+  }
+  const catalog = {
+    type: 'subagent/catalog',
+    seq: 3,
+    time: 1_700_000_000_003,
+    data: { childId: 'session-child', childCreatedAt: 1, version: 0, mode: 'one-shot' },
+  }
+  const text = {
+    type: 'assistant/message',
+    seq: 4,
+    time: 1_700_000_000_004,
+    data: { content: [{ type: 'text', text: 'session-live is mentioned here' }] },
+  }
+  const parts = await harness({ live: { events: [event(0), delivery, job, catalog, text] } })
+  try {
+    const result = await performMove(parts.ctx, {}, {
+      sessionId: 'session-live',
+      workspaceId: parts.targetWorkspace.id,
+    })
+    const copied = parts.persistence.sessions.get(result.sessionId).events
+    assert.equal(copied[1].data.sessionId, result.sessionId, 'the delivery watermark names the clone')
+    assert.equal(copied[2].data.owner, 'session-live', 'copied history does not transfer job ownership')
+    assert.equal(copied[3].data.childId, 'session-child', 'the catalog keeps naming its child')
+    assert.equal(copied[4].data.content[0].text, 'session-live is mentioned here', 'free text is untouched')
+  } finally {
+    await parts.cleanup()
+  }
 })

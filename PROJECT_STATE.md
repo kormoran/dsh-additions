@@ -1,6 +1,6 @@
 # PROJECT_STATE — dsh-additions
 
-Memoria permanente del progetto. Aggiornato: **2026-11-27**, versione **0.8.0**.
+Memoria permanente del progetto. Aggiornato: **2026-11-27**, versione **0.9.0**.
 Pacchetto e repository GitHub si chiamano entrambi `dsh-additions` (il repository
 è stato rinominato il 26/11; la cartella locale resta
 `C:\Users\m.soricetti\Documents\GitHub\dsh-chatshifter`).
@@ -16,44 +16,78 @@ file, righe di codice e di documentazione) alimentano il pannello destro
 «Workspace», e i **segnali sonori** di fine turno e richiesta di autorizzazione
 hanno una **pagina di configurazione** nel plugin.
 
-## Stato: 0.8.0 — `/rename`, namespace `additions`, pagina dei suoni
+## Stato: 0.9.0 — P0 dello spostamento chiuso (dati, chat occupate, idempotenza)
 
-`dsh-additions` v0.8.0 è nel profilo `web` come **tarball**
-(`file:C:/Users/…/dist/dsh-additions-0.8.0.tgz`), la riga `additions` del loader
-è `active`, il vecchio alias `dsh-chatshifter` è stato rimosso (27/11). Il
-pacchetto dichiara il namespace di impostazioni `additions` e la metà browser
-registra la sua pagina in `plugins.row.config`; aggiornare il codice richiede
-`npm pack` + rimozione/reinstallazione del tarball.
+`dsh-additions` v0.9.0 è nel profilo `web` come **tarball**
+(`file:C:/Users/…/dist/dsh-additions-0.9.0.tgz`), la riga `additions` del loader
+è `active`. Il pacchetto dichiara il namespace `additions`, la pagina in
+`plugins.row.config` e `engines.dsh`; aggiornare il codice richiede `npm pack` +
+rimozione/reinstallazione del tarball.
 
 Verificato il 27/11 (DSH 0.2.2-rc.1, pnpm 12.23):
 
 ```text
-test:      80/80 unitari verdi (26 bundle, 15 host, 9 /quit, 9 /rename,
-           9 statistiche, 10 suoni + schema)
-rename:    commands/list per un agente vivo elenca
-           {"definitionId":"dsh-additions:rename","name":"rename",
-            "input":{"hint":"New chat title"}};
-           commands/execute '/rename' -> error con titolo attuale + uso (percorso di lettura)
-schema:    SettingsForms.volatileForm(Config) proietta { sounds: { enabled, ding, approval } }
-describe:  settings/describe serve {"ns":"additions","autoGenerate":true,...}
-           value/base = {"sounds":{"enabled":true,"ding":"","approval":""}}, user {}
-scrittura: settings/mutate ha puntato sounds.ding a un WAV -> /api/additions.info e la rotta
-           del suono l'hanno visto subito (config volatile, nessun remount)
-ripristino: settings/mutate con unset -> patch del profilo tornato pulito (riga additions rimossa)
-host:      GET /api/additions.info -> 200, version 0.8.0
-bundle:    /plugins/??dsh-additions/client.js&rev=… -> 200 (busta con la pagina)
-pacchetto: dist/dsh-additions-0.8.0.tgz — 13 file, 121,4 kB, sha1 5ea866bb…
-profilo:   dsh-additions@0.8.0 da file:…/dist/dsh-additions-0.8.0.tgz;
-           schemastery fra le dipendenze; describe/info/bundle verificati sulla copia installata
-pnpm:      profilo migrato a pnpm 12.23/store v11; `pnpm install` 19,5 s, lockfile v9
-           invariato (solo il link di dsh-locale-it allineato), `pnpm install --frozen-lockfile`
-           no-op in 74 ms, una `pnpm remove` reale in una copia ha funzionato in 1,3 s
+test:      93/93 unitari verdi
+preflight: sessione viva dentro il turno -> movable:false, code source-busy,
+           details.activity = [{kind:'job', items:[…]}, {kind:'turn'}];
+           sessione fredda -> movable:true, 1322 eventi, formatStatus current
+rename:    commands/list elenca dsh-additions:rename; '/rename' senza argomento
+           risponde con il titolo attuale + uso
+schema:    volatileForm(Config) proietta { sounds: { enabled, ding, approval } }
+describe:  settings/describe serve {"ns":"additions",…}; value/base coerenti
+integration: log reale 1322 eventi, 170 marker ri-puntati; la copia viene
+           riaperta e validata (freddo e caldo), poi riaperta per il confronto
+host:      GET /api/additions.info -> 200, version 0.9.0
+bundle:    /plugins/??dsh-additions/client.js&rev=929efa502c50 -> 200, 77.637 byte,
+           contiene il preflight e i motivi localizzati
+pacchetto: dist/dsh-additions-0.9.0.tgz — 14 file, 129,0 kB, sha1 555c2808…
+profilo:   dsh-additions@0.9.0 da file:…/dist/dsh-additions-0.9.0.tgz
+pnpm:      profilo migrato a pnpm 12.23/store v11; lockfile v9 invariato
 ```
 
 Confermato a video dall'utente il 27/11: la pagina del plugin mostra il pulsante
-di configurazione e le due caselle di testo funzionano. Resta da provare a video
-il **rename effettivo** (`/rename Nuovo titolo`): il percorso di sola lettura è
-verificato, quello di scrittura è coperto dai test ma non ancora digitato in GUI.
+di configurazione e le due caselle di testo funzionano. Restano da provare a
+video il **rename effettivo** (`/rename Nuovo titolo`), `/quit` e il nuovo
+rifiuto delle chat occupate (che la RPC ha già verificato).
+
+## Meccanica P0 dello spostamento (0.9.0) — fatti
+
+1. **Il motore vive in `lib/move.js`** (`createMoveEngine`, `performMove`,
+   `preflightMove`, `validateClone`, `cleanupClone`), `lib/index.js` fa le rotte
+   e ri-esporta per compatibilità.
+2. **La copia si valida prima di archiviare**: `validateClone` riapre la copia
+   in sola lettura e confronta id, `cwd`, `isSeeded`/cut, lunghezza, seq dense da
+   zero, tipi, `time` dei primi eventi e marker di consegna intestati alla copia.
+   Un fallimento produce `clone-invalid` (500) con `reason`, nessun attach,
+   nessuna archiviazione, e cleanup best-effort.
+3. **Cleanup solo su percorsi assoluti**: `cleanupClone` rimuove il file
+   dell'artefatto e la directory della sessione se vuota; un `location` relativo
+   o assente viene riportato `cleaned:false` invece di rischiare rimozioni.
+4. **Le chat occupate si rifiutano**: `ctx.waterfall('workspace/session-activity',
+   { sessionId }, () => [])` è la stessa admission dell'archivio del registry;
+   un'attività non vuota produce `source-busy` (409) con `details.activity`.
+   Senza listener o con un provider guasto si prosegue (log del guasto), perché
+   l'archivio chiede comunque lo stop.
+5. **Preflight di sola lettura** (`GET /api/additions.preflight`): risponde
+   `movable:false` con codice per subagente, vuota, inesistente, formato e
+   sorgente occupata. Il dialog la chiama all'apertura; un preflight fallito
+   ricade sul picker (il move reale rifiuta comunque).
+6. **Un motore per istanza del plugin**: lock per `sessionId`
+   (`move-in-progress`) e memoria degli `requestId` risolti (max 50, replay dello
+   stesso esito; un rifiuto libera l'id per il retry).
+7. **Identità: si ri-puntano solo i marker di consegna** della copia.
+   `job/*.owner` resta la sorgente (il contratto dice che la storia copiata non
+   trasferisce l'esecuzione); `subagent/catalog.childId` nomina i figli; il testo
+   che cita l'id resta testo. Audit su log reali: solo `delivery-accepted`
+   (`sessionId`) e `job/*` (`owner`).
+8. **Confronto directory per piattaforma** (`pathsEqual`: case-insensitive su
+   win32/darwin, case-sensitive altrove), id senza separatori di percorso,
+   header senza versione valida rifiutato (`unsupported-format`).
+9. **Contratto di compatibilità**: `engines.dsh` = `>=0.2.2-rc.1 <0.3.0-0`;
+   API host/client elencate nel README.
+10. **Resta aperto (documentato)**: titolo delle copie fork-derived senza
+    `session/title` (workaround `/rename`), deselezione della chat aperta dopo
+    l'archiviazione (nessuna API pubblica), matrice multi-OS (serve CI).
 
 ## Meccanica di `/rename` (0.8.0) — fatti
 
@@ -223,9 +257,10 @@ Due correzioni emerse usando il plugin su Node 24 / DSH 0.2.1-rc.2:
 | **0.6.0** | Segnali sonori (due cue da `uiSession.sessionStatus`), pannello «Workspace» con statistiche, `/quit`. |
 | **0.7.0** | Namespace di impostazioni `additions` (schema `Config` con campi volatili) e pagina dei suoni in `plugins.row.config`. |
 | **0.8.0** | `/rename <titolo>` dal composer, sullo stesso percorso del rename nativo; installazione del profilo dal tarball `dsh-additions`. |
+| **0.9.0** | P0 dello spostamento: validazione della copia prima dell'archiviazione, rifiuto delle chat occupate con preflight, lock/`requestId`, audit delle identità, confronto path per piattaforma, `engines.dsh`. |
 | **Profilo** | Rimossi i due link orfani e la vecchia cartella del probe; profilo `web` pulito, plugin live ancora attivo. |
 | **Pacchetto** | `package.json` completo, LICENSE MIT, CHANGELOG, tarball verificato, import del modulo host riuscito, `npm pack` senza file interni. |
-| **Verifiche** | 80/80 test unitari, integrazione JSONL reale, smoke test GUI, cambio lingua a video, riparazione di `session-fb1907a8…` con 1321 eventi. |
+| **Verifiche** | 93/93 test unitari, integrazione JSONL reale (che ora esercita anche la validazione della copia), smoke test GUI, cambio lingua a video, riparazione di `session-fb1907a8…` con 1321 eventi. |
 
 ## Architettura scelta: clonazione del log
 
@@ -433,7 +468,8 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 
 | Percorso | Ruolo |
 |---|---|
-| `lib/index.js` | host: `Config` (schema del namespace `additions`), comando `/quit`, `/rename` (iniettabile), lettura sorgente, clone persistito, attach, archive, rotte `/api/additions.*` (move, info, workspace-stats, sound) |
+| `lib/index.js` | host: `Config` (schema del namespace `additions`), comandi, rotte `/api/additions.*` (move, preflight, info, workspace-stats, sound), config normalizzata; ri-esporta il motore di `move.js` |
+| `lib/move.js` | host: motore dello spostamento — lettura sorgente, rifiuto chat occupate, clone, validazione con riapertura, cleanup, lock/`requestId`, audit delle identità |
 | `lib/quit.js` | host: `/quit`, scheduler dello spegnimento (interrupt + watchdog), config `quit` |
 | `lib/rename.js` | host: `/rename`, parsing del titolo (virgolette), rename via `sessionTitle.rename`, uso senza argomento |
 | `lib/sounds.js` | host: risoluzione dei due cue (asset impacchettati o percorso configurato), `readLive()` per i campi volatili, tipi MIME e rotta `SOUND_PATH` |
@@ -442,18 +478,18 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 | `lib/client.js` | browser: bundle a mano su `ctx.slots` — voce «Sposta nel workspace…», dialog, tab «Workspace», watcher dei segnali sonori, pagina di configurazione dei suoni in `plugins.row.config` |
 | `cordis.patch.yml` | riga `insert` del bundle nel profilo (config `archiveSource`, `quit`, `stats`, `sounds`) |
 | `package.json` | bundle + `dsh.client` + export `./client` |
-| `tests/host.test.js` | 15 test host con persistenza/registry finti |
+| `tests/host.test.js` | 24 test del motore/rotte con persistenza e registry finti: clone, validazione, busy, lock/requestId, cleanup, identità, path |
 | `tests/quit.test.js` | 9 test del comando: config, ordine interrupt/watchdog, idempotenza, annullamento, argomenti rifiutati |
 | `tests/rename.test.js` | 9 test del comando: parsing del titolo, registrazione, rinomina, virgolette, uso, chat non viva, titolo invalido, errore generico, wiring con e senza il servizio |
 | `tests/sounds.test.js` | 10 test dei segnali: config, riferimenti volatili, schema `Config`, validità dei WAV (header), file sostituito, fallback, rotta (anche live) e info |
 | `tests/stats.test.js` | 9 test delle statistiche: fixture su disco, CRLF/binari, budget, risoluzione target, rotta e cache |
-| `tests/client.test.js` | 26 test del bundle browser (vm, `window.__ModuleLoader__`): registrazioni slot, controller, transizioni dei segnali, player audio, pagina delle impostazioni, dizionari |
+| `tests/client.test.js` | 32 test del bundle browser (vm, `window.__ModuleLoader__`): registrazioni slot, controller, preflight, transizioni dei segnali, player audio, pagina delle impostazioni, dizionari |
 | `scripts/make-sounds.mjs` | rigenera i due WAV (sintesi a partiali, nessun campione di terzi) |
 | `scripts/integration.mjs` | integrazione con `SessionStore` + backend JSONL reali: legge una sessione vera in sola lettura (preferendo una con watermark), sposta a freddo e a caldo, riapre la copia |
 | `scripts/repro-delivery.mjs` | riproduce il guasto dei marker di consegna su una sessione reale (diagnostica) |
 | `scripts/repair-delivery.mjs` | ripara una copia già corrotta ri-puntando i marker, con dry-run e `--apply` |
 | `LICENSE` | licenza MIT |
-| `CHANGELOG.md` | cronologia 0.1.0 → 0.1.1 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 → 0.6.0 → 0.7.0 → 0.8.0 |
+| `CHANGELOG.md` | cronologia 0.1.0 → … → 0.8.0 → 0.9.0 |
 | `dist/dsh-additions-<version>.tgz` | tarball generato da `npm pack`, non versionato |
 | `probe-report.json` | reperto storico del POC (non più usato) |
 | `TODO.md` | backlog operativo per la 1.0.0 |
@@ -502,28 +538,29 @@ Rimedio: `pnpm install` nel profilo (19,5 s), che ricrea `node_modules` contro
 lo store v11 — lockfile v9 invariato, nessun aggiornamento di versione, solo il
 link di `dsh-locale-it` allineato al `package.json`; poi `pnpm install
 --frozen-lockfile` no-op e una `remove` di prova riuscita. Backup dei manifest
-in `.tmp/profile-backup/`. Resta da fare (a mano, fuori dall'agente):
-`npm rm -g pnpm` per togliere la copia 10.34.9 e lasciare un solo pnpm.
+in `.tmp/profile-backup/`. La copia npm-global 10.34.9 è stata rimossa
+dall'utente il 27/11: resta un solo pnpm (12.23, store v11).
 **Lezione**: a ogni cambio di major di pnpm (store `vN` → `vN+1`) va eseguito
 un `pnpm install` in ogni albero gestito da pnpm (profilo incluso), altrimenti
 add/remove si bloccano finché non lo si fa.
 
-Si riparte da [TODO.md](TODO.md), dai P0.
+Si riparte da [TODO.md](TODO.md): i P0 dello spostamento sono chiusi in 0.9.0;
+restano i video, la CI e la release.
 
 ## Prossimi passi
 
-1. **`/rename` a video** (27/11): digitare `/rename Nuovo titolo` nel composer su
-   una chat di prova e verificare che la riga in sidebar cambi subito e che il
-   titolo resti dopo un riavvio. Il percorso di lettura (`/rename` senza
-   argomento) è già verificato via RPC; quello di scrittura è coperto dai test
-   ma non ancora digitato in GUI.
-2. **Aggiornare il bundle installato**: il profilo usa ora il tarball
-   `file:…/dist/dsh-additions-0.8.0.tgz`; dopo ogni modifica al codice servono
-   `npm pack` + rimozione/reinstallazione del bundle (vedi «Come riprendere»).
-   Se la cartella della repo cambia, la spec `file:` del profilo va riallineata.
-3. **`/quit` a video**: interrompe il server, va fatto quando la sessione non
-   serve.
+1. **Video delle superfici nuove** (27/11): `/rename Nuovo titolo` (cambio in
+   sidebar + persistenza dopo riavvio), `/quit`, e il rifiuto di una chat
+   occupata (aprire il dialog su una chat in esecuzione: deve mostrare il motivo
+   localizzato invece delle destinazioni). La RPC ha già verificato preflight e
+   `/rename` in lettura.
+2. **Aggiornare il bundle installato**: il profilo usa il tarball
+   `file:…/dist/dsh-additions-0.9.0.tgz`; dopo ogni modifica al codice servono
+   `npm pack` + rimozione/reinstallazione (vedi «Come riprendere»).
+3. **P1**: CI multi-OS/Node, test ermetici, smoke test da artefatto pubblicato,
+   README inglese, revisione traduzioni.
 4. **Pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
    e/o il repository GitHub, oggi privato; poi lo smoke test in un profilo pulito.
-5. Riprendere il backlog P0 di [TODO.md](TODO.md): validazione della copia prima
-   dell'archiviazione, gestione delle chat in esecuzione, idempotenza.
+5. Restano aperti e documentati tre punti UX/ambiente: titolo delle copie
+   fork-derived senza `session/title` (workaround `/rename`), deselezione della
+   chat aperta dopo l'archiviazione (nessuna API pubblica), matrice multi-OS.

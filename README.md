@@ -191,18 +191,47 @@ Due avvertenze:
 
 1. Legge la sessione sorgente: dalla memoria se è viva (`ctx.sessions`),
    altrimenti dal log persistito con sola lettura (`ctx.sessionPersistence`).
-2. Scrive un **nuovo** log nella cartella di progetto del workspace di
+2. **Rifiuta una chat che sta ancora lavorando** (turno aperto, subagenti
+   discendenti, job posseduti, promemoria attivi): la stessa waterfall
+   `workspace/session-activity` che governa l'archiviazione del registry. Il
+   dialog chiede prima (`GET /api/additions.preflight`) e mostra il motivo senza
+   far scegliere una destinazione.
+3. Scrive un **nuovo** log nella cartella di progetto del workspace di
    destinazione, con lo stesso formato e gli stessi eventi. I marker di consegna
    del log (`session-log-deepseek/delivery-accepted`) vengono ri-puntati alla
    nuova identità: il formato rifiuta un marker della generazione corrente che
    nomina un'altra sessione, e senza questa riscrittura la copia risulta
    corrotta in lettura (`current-generation delivery marker names the wrong
    Session`). I marker dentro il prefisso ereditato di un fork restano invece
-   intestati all'antenato, come per qualsiasi fork.
-3. Registra la nuova sessione nel workspace (`Workspace.attachSession`), così
-   compare raggruppata sotto quel workspace.
-4. Archivia l'originale (`WorkspaceRegistry.archiveSession`) — nascosto, non
+   intestati all'antenato, come per qualsiasi fork. Le altre identità non si
+   toccano di proposito: `job/registered`/`job/settled` portano l'owner
+   originale («copied history does not transfer execution ownership») e
+   `subagent/catalog` nomina le sessioni figlie.
+4. **Riapre la copia e la valida** prima di proseguire: id, `cwd`, `isSeeded` e
+   cut, lunghezza, sequenze dense da zero, tipi, timestamp e marker di consegna
+   che nominano la copia. Se la validazione fallisce la copia non viene
+   registrata né l'originale archiviato: l'errore è `clone-invalid` con il
+   motivo e il file viene rimosso se il percorso è assoluto.
+5. Registra la nuova sessione nel workspace (`Workspace.attachSession`), così
+   compare raggruppata sotto quel workspace. Se la registrazione fallisce, la
+   copia viene rimossa (best-effort) e l'errore è `attach-failed`.
+6. Archivia l'originale (`WorkspaceRegistry.archiveSession`) — nascosto, non
    cancellato: lo spostamento è reversibile con «Ripristina».
+
+Due richieste concorrenti sulla stessa chat sono serializzate (`move-in-progress`);
+un `requestId` ripetuto risponde la stessa copia senza scriverne una seconda.
+
+## Compatibilità
+
+| Superficie | API usate |
+|---|---|
+| Host | `ctx.sessions` (`get`, `snapshotEvents`, `inheritedEventCount`), `ctx.sessionPersistence` (`stat`, `open`, `create`, `append`, `flush`, `close`), `ctx.workspaceRegistry` (`get`, `resolveByPath`, `create`, `attachSession`, `archiveSession`), `ctx.connection.fetch.register`, `ctx.commands.register`, `ctx.sessionTitle` (`get`, `rename`; opzionale), `ctx.waterfall('workspace/session-activity')`, `Config` schemastery per il namespace `additions` |
+| Browser | `ctx.slots.inject/register`, `ctx.locale.register/bind`, `ctx.workspaces.list`, `ctx.sessions.refresh`, `ctx.remote.directoryPicker.pick`, `ctx.configForms.get/whileServed/mutate`, i primitivi `Modal`/`Button`/`MenuItemButton`/`Switch`/`Input` |
+| Formato log | sessione **v4**; i log storici vengono letti dal backend, che li traduce in memoria alla versione corrente (la copia nasce nella versione logica letta). Nessun formato proprietario. |
+| Piattaforma | Windows (testato), percorsi macOS/Linux gestiti dal confronto case-sensitive; la matrice multi-OS non è ancora in CI |
+
+`package.json` dichiara `engines.dsh` (`>=0.2.2-rc.1 <0.3.0-0`): il plugin manager
+rifiuta l'installazione su una linea DSH diversa prima di eseguire codice.
 
 ## Cosa viaggia e cosa no
 
@@ -309,8 +338,11 @@ del profilo (i campi non volatili restano quelli correnti).
 
 Rotte autenticate dal carrier della connessione (solo Peer owner):
 
-- `POST /api/additions.move` — `{ sessionId, workspaceId? | targetPath?, keepOriginal? }`
-  → `{ ok, sessionId, workspaceId, workspaceTitle, workspacePath, source, events, location, archived, archiveError? }`
+- `GET /api/additions.preflight?sessionId=…` — `{ ok, movable, source? }` oppure
+  `{ ok, movable: false, code, message, details? }`; sola lettura, non scrive
+  nulla. Il dialog la interroga prima di offrire le destinazioni.
+- `POST /api/additions.move` — `{ sessionId, workspaceId? | targetPath?, keepOriginal?, requestId? }`
+  → `{ ok, sessionId, workspaceId, workspaceTitle, workspacePath, source, events, location, validated, archived, archiveError? }`
 - `GET /api/additions.info` — versione e configurazione della metà host.
 - `GET /api/additions.workspace-stats` — statistiche di un workspace (vedi sopra).
 - `GET /api/additions.sound?which=ding|approval` — il file audio del segnale,
@@ -319,7 +351,20 @@ Rotte autenticate dal carrier della connessione (solo Peer owner):
 Gli errori rispondono `{ ok: false, error: { code, message, details? } }`:
 `code` è il contratto stabile che il client traduce, `message` è un fallback
 inglese per i consumatori API e `details` porta i valori dei segnaposto
-(`sessionId`, `path`, `reason`, …).
+(`sessionId`, `path`, `reason`, `activity`, …). Codici dello spostamento:
+
+| `code` | HTTP | Quando |
+|---|---|---|
+| `missing-session`, `invalid-session-id`, `missing-target`, `relative-path`, `invalid-body` | 400 | richiesta inutilizzabile (l'id non può contenere separatori di percorso) |
+| `session-not-found`, `workspace-not-found` | 404 | chat o workspace inesistenti |
+| `subagent-session`, `empty-session`, `unsupported-format`, `same-workspace`, `source-busy`, `move-in-progress` | 409 | rifiuto di merito, prima di scrivere |
+| `invalid-path`, `workspace-create-failed` | 400 | la cartella scelta non può diventare un workspace |
+| `clone-invalid`, `attach-failed` | 500 | la copia non ha superato la validazione o la registrazione; l'originale **non** è archiviato |
+| `internal` | 500 | guasto inatteso, nel log dell'host |
+
+Il client localizza `source-busy`, `subagent-session`, `empty-session`,
+`session-not-found` e `move-in-progress`; per gli altri codici mostra il
+`message` dell'host.
 
 ## Sviluppo
 
@@ -374,10 +419,24 @@ Il tarball contiene i file dichiarati in `files`; `tests/`, `scripts/`,
 
 ## Limiti noti
 
-- Una chat sorgente vuota o una sotto-sessione di subagente vengono rifiutate.
-- La copia avviene all'istante: i turni ancora aperti vengono chiusi dal resume
-  sulla copia, come per qualsiasi log interrotto.
-- Se la scrittura riesce ma la registrazione nel workspace fallisce, la copia
-  resta su disco con un nuovo id e l'errore lo riporta.
+- Una chat sorgente vuota, una sotto-sessione di subagente o una chat che sta
+  ancora lavorando vengono rifiutate **prima** di scrivere; il dialog lo dice
+  prima di far scegliere la destinazione.
+- La copia è istantanea e non è transazionale con il workspace: se la
+  registrazione fallisce, la copia viene rimossa best-effort (solo un percorso
+  assoluto viene toccato) e l'errore `attach-failed` riporta id e motivo.
 - L'identità della chat cambia: eventuali link o automazioni che citano l'id
-  originale vanno aggiornati.
+  originale vanno aggiornati. Il proprietario dei job resta quello originale per
+  contratto (la storia copiata non trasferisce l'esecuzione), quindi i job
+  elencati nella copia appartengono ancora alla chat di partenza.
+- **Titolo delle copie fork-derived**: una sessione che era già un fork e non
+  aveva ancora un evento `session/title` resta senza titolo, perché il servizio
+  titoli esclude le sessioni seed dalla generazione automatica. La copia non è
+  viva al momento dello spostamento, quindi non si può chiedere al servizio di
+  generarlo: usa `/rename <titolo>` sulla copia (o sulla sorgente prima di
+  spostarla).
+- **Archiviando la chat aperta**, il client non ne azzera la selezione come fa
+  l'archiviazione nativa: la vista resta finché non si naviga altrove. Non
+  esiste un'API pubblica per chiudere la vista corrente.
+- La matrice multi-OS non è ancora in CI: il confronto dei percorsi è
+  case-sensitive fuori da Windows/macOS, ma è verificato solo su Windows.

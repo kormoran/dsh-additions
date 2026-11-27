@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.9.0 — 2026-11-27
+
+P0 del backlog: sicurezza dei dati e comportamento con lavoro in corso.
+
+- **La copia viene validata prima di archiviare l'originale.** Dopo la
+  scrittura il plugin riapre la copia in sola lettura e verifica id, `cwd`,
+  `isSeeded` e cut, lunghezza, sequenze dense da zero, tipi, timestamp e marker
+  di consegna intestati alla copia. Se qualcosa non torna: `clone-invalid`, la
+  copia non viene registrata né l'originale archiviato, e il file viene rimosso
+  quando il percorso è assoluto. `scripts/integration.mjs` esercita la
+  validazione su un log reale da 1.322 eventi con 170 watermark.
+- **Le chat in esecuzione vengono rifiutate** (`source-busy`, 409) prima di
+  scrivere: turno aperto, subagenti discendenti, job posseduti o promemoria
+  attivi, letti dalla waterfall `workspace/session-activity` — la stessa che
+  governa l'archiviazione del registry.
+- **Preflight** `GET /api/additions.preflight?sessionId=…`: sola lettura, il
+  dialog la interroga all'apertura e mostra il motivo localizzato (chat in
+  esecuzione, vuota, subagente, inesistente) invece di far scegliere una
+  destinazione che poi fallirebbe.
+- **Un motore di spostamento per plugin**: richieste concorrenti sulla stessa
+  chat sono serializzate (`move-in-progress`) e un `requestId` ripetuto risponde
+  la stessa copia senza scriverne una seconda (le richieste fallite si possono
+  ritentare).
+- **Audit delle identità**: solo i marker di consegna della copia vengono
+  ri-puntati; `job/*.owner` resta l'originale (contratto del formato: la storia
+  copiata non trasferisce l'esecuzione) e `subagent/catalog` continua a nominare
+  le sessioni figlie. Test dedicato con tutte e tre le forme.
+- **Cross-platform**: il confronto delle directory segue il filesystem
+  (case-sensitive fuori da Windows/macOS), gli id con separatori di percorso
+  sono rifiutati, un header senza versione di formato valida è rifiutato.
+- **Contratto di compatibilità**: `engines.dsh` (`>=0.2.2-rc.1 <0.3.0-0`) e
+  l'elenco delle API host/client usate nel README.
+- Il motore vive in `lib/move.js` con test dedicati; `lib/index.js` resta le
+  rotte e le altre superfici. 93 test unitari.
+
 ## 0.8.0 — 2026-11-27
 
 - **`/rename <titolo>`**: rinomina la chat corrente dal composer. Riusa il

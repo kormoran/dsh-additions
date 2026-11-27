@@ -1,6 +1,6 @@
 {
   "name": "dsh-additions",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Additions for DeepSeek Harness: /quit, /rename, notification sounds with a settings page, workspace statistics, and moving a chat to another workspace.",
   "author": "Massimo Soricetti <massimo.soricetti@gmail.com>",
   "license": "MIT",
@@ -15,6 +15,7 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "lib/move.js",
     "lib/quit.js",
     "lib/rename.js",
     "lib/sounds.js",
@@ -53,7 +54,8 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.1 <0.3.0-0"
   },
   "scripts": {
     "test": "node --test --test-isolation=none \"tests/*.test.js\"",
