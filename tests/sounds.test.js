@@ -152,6 +152,7 @@ test('the sound route streams audio and maps an unknown cue to a JSON refusal', 
   const routes = new Map()
   const ctx = {
     effect: (factory) => factory(),
+    inject: (names, factory) => (names.every((name) => ctx[name] !== undefined) ? factory(ctx) : undefined),
     commands: { register: () => () => {} },
     workspaceRegistry: { get: () => undefined },
     connection: {
@@ -196,6 +197,7 @@ test('the sound route reads the live settings value on every request', async () 
     const routes = new Map()
     const ctx = {
       effect: (factory) => factory(),
+      inject: (names, factory) => (names.every((name) => ctx[name] !== undefined) ? factory(ctx) : undefined),
       commands: { register: () => () => {} },
       workspaceRegistry: { get: () => undefined },
       connection: {
@@ -227,6 +229,7 @@ test('the info route publishes the sounds config', async () => {
   const routes = new Map()
   const ctx = {
     effect: (factory) => factory(),
+    inject: (names, factory) => (names.every((name) => ctx[name] !== undefined) ? factory(ctx) : undefined),
     commands: { register: () => () => {} },
     workspaceRegistry: { get: () => undefined },
     connection: {

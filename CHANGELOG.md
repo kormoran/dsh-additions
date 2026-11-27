@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0 — 2026-11-27
+
+- **`/rename <titolo>`**: rinomina la chat corrente dal composer. Riusa il
+  percorso del rename nativo (`SessionTitleService.rename` → evento
+  `session/title` con sorgente `user`), quindi il titolo è durevole, blocca la
+  rigenerazione automatica e segue il log in una copia spostata. Il testo dopo
+  il comando è il titolo; una coppia di virgolette esterna viene tolta. Senza
+  argomento risponde con il titolo attuale e l'uso.
+- Il comando si registra in modo opzionale (`ctx.inject(['sessionTitle'])`):
+  in una composizione senza il servizio dei titoli non compare, e il resto del
+  plugin (move, statistiche, suoni, `/quit`) resta intatto.
+- 9 test nuovi (`tests/rename.test.js`): parsing del titolo, registrazione,
+  rinomina, virgolette, uso, chat non viva, titolo invalido, errore generico e
+  wiring di `apply` con e senza il servizio. Totale: 80 test.
+
 ## 0.7.0 — 2026-11-27
 
 - **Il plugin ha un suo namespace di impostazioni** (`additions`): `lib/index.js`

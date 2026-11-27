@@ -460,6 +460,7 @@ test('the HTTP routes answer with JSON and map expected refusals', async () => {
         },
       },
       effect: (factory) => factory(),
+      inject: (names, factory) => (names.every((name) => ctx[name] !== undefined) ? factory(ctx) : undefined),
     }
     apply(ctx, { archiveSource: true })
 

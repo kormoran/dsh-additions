@@ -1,8 +1,8 @@
 # dsh-additions bundle patch: inserts the host row into the profile roster.
-# The node half (exports ".") registers the `/quit` slash command, declares the
-# `additions` settings namespace, and serves the /api/additions.* routes (move,
-# workspace statistics, notification sounds); the browser half (exports
-# "./client", declared in package.json dsh.client) adds the "Sposta nel
+# The node half (exports ".") registers the `/quit` and `/rename` slash commands,
+# declares the `additions` settings namespace, and serves the /api/additions.*
+# routes (move, workspace statistics, notification sounds); the browser half
+# (exports "./client", declared in package.json dsh.client) adds the "Sposta nel
 # workspace…" action, the right-panel «Workspace» tab, the two notification cues
 # and the plugin's settings page (Plugins → dsh-additions → additions row).
 - insert:

@@ -76,6 +76,25 @@ browser continua a funzionare.
 
 ## Comandi
 
+### `/rename` — rinomina la chat corrente
+
+Il rename nativo resta nel menu `⋯` della chat (voce «Rinomina», con il suo
+dialog); `/rename` è la variante da tastiera, per quando la mano è già sul
+composer:
+
+```text
+/rename Nuovo titolo
+/rename "Un titolo con spazi"
+```
+
+Il testo dopo il comando è il titolo (una coppia di virgolette esterna viene
+tolta). Il comando usa lo stesso percorso del rename nativo
+(`SessionTitleService.rename`): scrive un evento `session/title` con sorgente
+`user`, quindi il titolo è durevole, blocca la rigenerazione automatica e
+viaggia con il log in una copia spostata. Senza argomento risponde con il titolo
+attuale e l'uso. Se il servizio dei titoli non è composto, il comando non
+compare e il resto del plugin resta intatto.
+
 ### `/quit` — ferma DSH
 
 Scrivi `/quit` nel composer e invia. Il comando risponde, poi dopo `delayMs`

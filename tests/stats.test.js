@@ -182,6 +182,7 @@ test('the route answers JSON, caches the scan, and maps refusals', async () => {
     const routes = new Map()
     const ctx = {
       effect: (factory) => factory(),
+      inject: (names, factory) => (names.every((name) => ctx[name] !== undefined) ? factory(ctx) : undefined),
       commands: { register: () => () => {} },
       workspaceRegistry: {
         get: (workspaceId) => (workspaceId === 'ws-fixture' ? { path: tree.root, title: 'Fixture' } : undefined),

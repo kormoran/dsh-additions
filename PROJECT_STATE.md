@@ -1,6 +1,6 @@
 # PROJECT_STATE — dsh-additions
 
-Memoria permanente del progetto. Aggiornato: **2026-11-27**, versione **0.7.0**.
+Memoria permanente del progetto. Aggiornato: **2026-11-27**, versione **0.8.0**.
 Pacchetto e repository GitHub si chiamano entrambi `dsh-additions` (il repository
 è stato rinominato il 26/11; la cartella locale resta
 `C:\Users\m.soricetti\Documents\GitHub\dsh-chatshifter`).
@@ -9,45 +9,68 @@ Il backlog per la 1.0.0 è in [TODO.md](TODO.md).
 ## Obiettivo
 
 Comandi e pannelli per DeepSeek Harness, ospitati in un solo plugin: `/quit`
-ferma il processo dal composer, lo spostamento di una chat in un altro workspace
-resta la funzione storica nata come `dsh-chatshifter`, le statistiche dei
-workspace (dimensione, directory, file, righe di codice e di documentazione)
-alimentano il pannello destro «Workspace», e i **segnali sonori** di fine turno
-e richiesta di autorizzazione hanno una **pagina di configurazione** nel plugin.
+ferma il processo dal composer, `/rename` rinomina la chat corrente, lo
+spostamento di una chat in un altro workspace resta la funzione storica nata
+come `dsh-chatshifter`, le statistiche dei workspace (dimensione, directory,
+file, righe di codice e di documentazione) alimentano il pannello destro
+«Workspace», e i **segnali sonori** di fine turno e richiesta di autorizzazione
+hanno una **pagina di configurazione** nel plugin.
 
-## Stato: 0.7.0 — namespace `additions` e pagina di configurazione dei suoni
+## Stato: 0.8.0 — `/rename`, namespace `additions`, pagina dei suoni
 
-`dsh-additions` v0.7.0 è nel profilo `web` come **tarball**
-(`file:C:/Users/…/dist/dsh-additions-0.7.0.tgz`), la riga `additions` del loader
-è `active` e il vecchio alias `dsh-chatshifter` è stato rimosso (27/11). Il
+`dsh-additions` v0.8.0 è nel profilo `web` come **tarball**
+(`file:C:/Users/…/dist/dsh-additions-0.8.0.tgz`), la riga `additions` del loader
+è `active`, il vecchio alias `dsh-chatshifter` è stato rimosso (27/11). Il
 pacchetto dichiara il namespace di impostazioni `additions` e la metà browser
-registra la sua pagina in `plugins.row.config`; aggiornare il codice ora
-richiede `npm pack` + reinstallazione del tarball.
+registra la sua pagina in `plugins.row.config`; aggiornare il codice richiede
+`npm pack` + rimozione/reinstallazione del tarball.
 
 Verificato il 27/11 (DSH 0.2.2-rc.1, pnpm 12.23):
 
 ```text
-test:      71/71 unitari verdi (26 bundle, 15 host, 9 /quit, 9 statistiche, 10 suoni + schema)
+test:      80/80 unitari verdi (26 bundle, 15 host, 9 /quit, 9 /rename,
+           9 statistiche, 10 suoni + schema)
+rename:    commands/list per un agente vivo elenca
+           {"definitionId":"dsh-additions:rename","name":"rename",
+            "input":{"hint":"New chat title"}};
+           commands/execute '/rename' -> error con titolo attuale + uso (percorso di lettura)
 schema:    SettingsForms.volatileForm(Config) proietta { sounds: { enabled, ding, approval } }
 describe:  settings/describe serve {"ns":"additions","autoGenerate":true,...}
            value/base = {"sounds":{"enabled":true,"ding":"","approval":""}}, user {}
 scrittura: settings/mutate ha puntato sounds.ding a un WAV -> /api/additions.info e la rotta
            del suono l'hanno visto subito (config volatile, nessun remount)
 ripristino: settings/mutate con unset -> patch del profilo tornato pulito (riga additions rimossa)
-host:      GET /api/additions.info -> 200, version 0.7.0
-bundle:    /plugins/??dsh-additions/client.js&rev=9c570359ecef -> 200 (busta con la pagina)
-pacchetto: dist/dsh-additions-0.7.0.tgz — 12 file, 119,7 kB, sha1 9ddc4d7f…
+host:      GET /api/additions.info -> 200, version 0.8.0
+bundle:    /plugins/??dsh-additions/client.js&rev=… -> 200 (busta con la pagina)
+pacchetto: dist/dsh-additions-0.8.0.tgz — 13 file, 121,4 kB, sha1 5ea866bb…
+profilo:   dsh-additions@0.8.0 da file:…/dist/dsh-additions-0.8.0.tgz;
+           schemastery fra le dipendenze; describe/info/bundle verificati sulla copia installata
 pnpm:      profilo migrato a pnpm 12.23/store v11; `pnpm install` 19,5 s, lockfile v9
            invariato (solo il link di dsh-locale-it allineato), `pnpm install --frozen-lockfile`
            no-op in 74 ms, una `pnpm remove` reale in una copia ha funzionato in 1,3 s
-profilo:   alias rimosso e pacchetto reinstallato: dsh-additions@0.7.0 da
-           file:…/dist/dsh-additions-0.7.0.tgz; vecchio link dsh-chatshifter sparito;
-           schemastery fra le dipendenze; describe/info/bundle verificati sulla copia installata
 ```
 
-Non provato a video: la pagina nella UI (apertura, caselle, Salva) e l'effetto
-udibile di un cambio file a pagina aperta. La logica è coperta dai test e la
-catena host è verificata via RPC autenticata.
+Confermato a video dall'utente il 27/11: la pagina del plugin mostra il pulsante
+di configurazione e le due caselle di testo funzionano. Resta da provare a video
+il **rename effettivo** (`/rename Nuovo titolo`): il percorso di sola lettura è
+verificato, quello di scrittura è coperto dai test ma non ancora digitato in GUI.
+
+## Meccanica di `/rename` (0.8.0) — fatti
+
+1. **Il comando riceve l'agente, non la sessione**: `invocation.agent` è
+   l'handle pubblico con solo `id` (`SessionId`); la sessione viva si prende da
+   `ctx.sessions.get(invocation.agent.id)`.
+2. **Il rename riusa il percorso nativo**: `ctx.sessionTitle.rename(session,
+   title)` appende un evento `session/title` con sorgente `user`; il titolo è
+   durevole, blocca la rigenerazione automatica e viaggia nella copia spostata.
+   Non esiste un altro modo supportato di cambiare titolo.
+3. **`sessionTitle` è iniettato in modo opzionale** (`ctx.inject`): senza il
+   servizio il comando non compare e il resto del plugin resta carico.
+4. **Il comando è globale**: `ctx.commands.register` sul contesto radice; il
+   catalogo client (`commands/list`) lo mostra per ogni agente, con
+   `input.hint` usato dal composer.
+5. **Nessun comando `rename` preesistente**: il registro rifiuta i duplicati
+   (`command "…" is already registered`), verificato che non ci fosse.
 
 ## Meccanica delle impostazioni (0.7.0) — fatti
 
@@ -197,9 +220,12 @@ Due correzioni emerse usando il plugin su Node 24 / DSH 0.2.1-rc.2:
 | **0.1.0** | Spostamento tra workspace: clonazione del log, attach, archiviazione reversibile, menu contestuale, conferma e report. |
 | **0.1.1** | Marker `delivery-accepted` ri-puntati alla copia; copia rotta riparata; tool di riproduzione e riparazione; integrazione con watermark reali. |
 | **0.2.0** | UI in 9 lingue (`zh`, `en`, `ja`, `es`, `fr`, `de`, `ru`, `pt`, `it`), `zh` baseline, errori host con `code`/`details`, menu che segue il locale. |
+| **0.6.0** | Segnali sonori (due cue da `uiSession.sessionStatus`), pannello «Workspace» con statistiche, `/quit`. |
+| **0.7.0** | Namespace di impostazioni `additions` (schema `Config` con campi volatili) e pagina dei suoni in `plugins.row.config`. |
+| **0.8.0** | `/rename <titolo>` dal composer, sullo stesso percorso del rename nativo; installazione del profilo dal tarball `dsh-additions`. |
 | **Profilo** | Rimossi i due link orfani e la vecchia cartella del probe; profilo `web` pulito, plugin live ancora attivo. |
 | **Pacchetto** | `package.json` completo, LICENSE MIT, CHANGELOG, tarball verificato, import del modulo host riuscito, `npm pack` senza file interni. |
-| **Verifiche** | 28/28 test unitari, integrazione JSONL reale, smoke test GUI, cambio lingua a video, riparazione di `session-fb1907a8…` con 1321 eventi. |
+| **Verifiche** | 80/80 test unitari, integrazione JSONL reale, smoke test GUI, cambio lingua a video, riparazione di `session-fb1907a8…` con 1321 eventi. |
 
 ## Architettura scelta: clonazione del log
 
@@ -407,8 +433,9 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 
 | Percorso | Ruolo |
 |---|---|
-| `lib/index.js` | host: `Config` (schema del namespace `additions`), comando `/quit`, lettura sorgente, clone persistito, attach, archive, rotte `/api/additions.*` (move, info, workspace-stats, sound) |
+| `lib/index.js` | host: `Config` (schema del namespace `additions`), comando `/quit`, `/rename` (iniettabile), lettura sorgente, clone persistito, attach, archive, rotte `/api/additions.*` (move, info, workspace-stats, sound) |
 | `lib/quit.js` | host: `/quit`, scheduler dello spegnimento (interrupt + watchdog), config `quit` |
+| `lib/rename.js` | host: `/rename`, parsing del titolo (virgolette), rename via `sessionTitle.rename`, uso senza argomento |
 | `lib/sounds.js` | host: risoluzione dei due cue (asset impacchettati o percorso configurato), `readLive()` per i campi volatili, tipi MIME e rotta `SOUND_PATH` |
 | `lib/workspace-stats.js` | host: scansione di un workspace (byte, directory, file, righe codice/doc), limiti e rotta `STATS_PATH` |
 | `assets/ding.wav`, `assets/uh-oh.wav` | i due suoni predefiniti, sintetizzati (16-bit mono 22 kHz) |
@@ -417,6 +444,7 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 | `package.json` | bundle + `dsh.client` + export `./client` |
 | `tests/host.test.js` | 15 test host con persistenza/registry finti |
 | `tests/quit.test.js` | 9 test del comando: config, ordine interrupt/watchdog, idempotenza, annullamento, argomenti rifiutati |
+| `tests/rename.test.js` | 9 test del comando: parsing del titolo, registrazione, rinomina, virgolette, uso, chat non viva, titolo invalido, errore generico, wiring con e senza il servizio |
 | `tests/sounds.test.js` | 10 test dei segnali: config, riferimenti volatili, schema `Config`, validità dei WAV (header), file sostituito, fallback, rotta (anche live) e info |
 | `tests/stats.test.js` | 9 test delle statistiche: fixture su disco, CRLF/binari, budget, risoluzione target, rotta e cache |
 | `tests/client.test.js` | 26 test del bundle browser (vm, `window.__ModuleLoader__`): registrazioni slot, controller, transizioni dei segnali, player audio, pagina delle impostazioni, dizionari |
@@ -425,7 +453,7 @@ riapre la copia; prima della correzione fallisce con lo stesso `SessionFormatErr
 | `scripts/repro-delivery.mjs` | riproduce il guasto dei marker di consegna su una sessione reale (diagnostica) |
 | `scripts/repair-delivery.mjs` | ripara una copia già corrotta ri-puntando i marker, con dry-run e `--apply` |
 | `LICENSE` | licenza MIT |
-| `CHANGELOG.md` | cronologia 0.1.0 → 0.1.1 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 |
+| `CHANGELOG.md` | cronologia 0.1.0 → 0.1.1 → 0.2.0 → 0.3.0 → 0.4.0 → 0.5.0 → 0.6.0 → 0.7.0 → 0.8.0 |
 | `dist/dsh-additions-<version>.tgz` | tarball generato da `npm pack`, non versionato |
 | `probe-report.json` | reperto storico del POC (non più usato) |
 | `TODO.md` | backlog operativo per la 1.0.0 |
@@ -484,12 +512,13 @@ Si riparte da [TODO.md](TODO.md), dai P0.
 
 ## Prossimi passi
 
-1. **Pagina delle impostazioni a video** (27/11): aprire Plugins →
-   `dsh-additions` → riga `additions` → configurazione; provare la casella, le
-   due caselle di testo, Salva e l'effetto udibile di un file sostituito a
-   pagina aperta.
+1. **`/rename` a video** (27/11): digitare `/rename Nuovo titolo` nel composer su
+   una chat di prova e verificare che la riga in sidebar cambi subito e che il
+   titolo resti dopo un riavvio. Il percorso di lettura (`/rename` senza
+   argomento) è già verificato via RPC; quello di scrittura è coperto dai test
+   ma non ancora digitato in GUI.
 2. **Aggiornare il bundle installato**: il profilo usa ora il tarball
-   `file:…/dist/dsh-additions-0.7.0.tgz`; dopo ogni modifica al codice servono
+   `file:…/dist/dsh-additions-0.8.0.tgz`; dopo ogni modifica al codice servono
    `npm pack` + rimozione/reinstallazione del bundle (vedi «Come riprendere»).
    Se la cartella della repo cambia, la spec `file:` del profilo va riallineata.
 3. **`/quit` a video**: interrompe il server, va fatto quando la sessione non

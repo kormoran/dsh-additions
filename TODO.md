@@ -46,6 +46,15 @@ tempo basta).
         possono moltiplicare i ding durante workflow) e un breve debounce tra due
         ding ravvicinati.
 
+- [ ] **`/rename` (0.8.0)**
+  - [x] Comando registrato (`commands/list` lo elenca con `dsh-additions:rename`),
+        parsing del titolo e percorso di sola lettura (`/rename` senza argomento)
+        verificati via RPC autenticata.
+  - [ ] Prova a video del rename effettivo: `/rename Nuovo titolo` deve cambiare
+        la riga in sidebar e il titolo deve restare dopo un riavvio.
+  - [ ] Valutare se aggiungere anche un comando per *leggere* il titolo corrente
+        (oggi lo mostra solo l'uso senza argomento).
+
 - [ ] **`/quit` — comportamento con lavoro in corso**
   - [ ] Decidere se rifiutare quando un turno è aperto o job sono attivi, o
         documentare che li interrompe (oggi: li interrompe, il log resta
