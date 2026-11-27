@@ -5,23 +5,9 @@ Additional commands and functions for the DeepSeek Harness.
 The plugin is a collection of functions added for my convenience as I used the harness;
 hence the name `dsh-additions` because it's the place to add what you need—a
 command, a panel, an action—without opening a new plugin each time.
-For this reason, I left the version at 0.x.0 instead of publishing it as "1.0.0": since
+For this reason, I left the numbering 0.x.0 instead of publishing it as "1.0.0": since
 it's a collection of functions, there will probably never be a "complete" version of
 this plugin. This is even more true because dsh itself is still in version 0.2.2 at the moment, so everything is still in progress.
-
-- **command** (`lib/quit.js`) — `/quit` stops the DSH process from composer,
-with a sorted path and exit watchdog;
-- **host** (`lib/index.js`) — reads the source session, writes a new copy
-persisted under the destination workspace, saves it in the workspace, and
-archives the original;
-- **browser** (`lib/client.js`) — a "Move to workspace..." item in the
-chat context menu, with a choice of destination, an explicit warning
-about what is not being moved, and the outcome of the operation. The item and messages are
-translated into all DSH languages ​​plus Italian.
-
-> The browser half uses the current client API (`ctx.slots`): the item appears in the
-> chat `⋯` menu and opens a dialog for choosing the destination. On DSH
-> 0.2.0, which exposed `ctx.contextMenus`, this version does not load.
 
 ## Workspace Statistics
 
