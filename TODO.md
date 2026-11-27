@@ -76,8 +76,8 @@ Backlog operativo per `dsh-additions`.
 ## P1 — release
 
 - [x] Canale scelto: `npm publish` e repo GitHub pubblico (27/11).
-- [ ] Pubblicare `0.10.0` su npm (`npm publish --access public`) e creare la release `v0.10.0`.
-- [ ] Installare l'artefatto pubblicato in un profilo pulito e rifare lo smoke test completo.
+- [x] Pubblicare `0.10.0` su npm (`npm publish --access public`) e creare la release `v0.10.0`.
+- [x] Installare l'artefatto pubblicato in un profilo pulito e rifare lo smoke test completo.
 - [ ] Smoke test finale: spostamento chat ferma, rifiuto chat in esecuzione, copia fork-derived, errore localizzato, cambio lingua.
 - [ ] Push di `main` e del tag; allegare il tarball alla release GitHub.
 - [ ] Listing su `awesome-dsh-plugin` (`data/plugins/kormoran__dsh-additions.yml`) e topic GitHub `dsh-plugin`.
@@ -89,7 +89,7 @@ Backlog operativo per `dsh-additions`.
 - [x] Chat in esecuzione rifiutate con un comportamento documentato.
 - [x] Audit identità verde.
 - [ ] Test verdi su tre OS e Node 20/22.
-- [ ] Installazione da artefatto pubblicato in un profilo pulito.
+- [x] Installazione da artefatto pubblicato in un profilo pulito.
 - [ ] README, CHANGELOG, compatibilità e tag allineati.
 
 ## Fuori scope

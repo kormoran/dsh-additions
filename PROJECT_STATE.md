@@ -18,10 +18,13 @@ hanno una **pagina di configurazione** nel plugin.
 
 ## Stato: 0.10.0 — P0 chiuso e localizzazione completa (8 lingue DSH + italiano)
 
-`dsh-additions` v0.10.0 è nel profilo `web` come **tarball**
-(`file:C:/Users/…/dist/dsh-additions-0.10.0.tgz`), la riga `additions` del loader
-è `active`. Il pacchetto dichiara il namespace `additions`, la pagina in
-`plugins.row.config`, `engines.dsh` e i metadati localizzati in `locale/`.
+`dsh-additions` v0.10.0 è **pubblicato su npm** (`dsh-additions@0.10.0`,
+`latest`), installabile con `dsh plugin --profile <name> add dsh-additions`; il
+profilo `web` usa ancora il tarball locale (`file:…/dist/dsh-additions-0.10.0.tgz`)
+per lo sviluppo. Il pacchetto dichiara il namespace `additions`, la pagina in
+`plugins.row.config`, `engines.dsh`, `dsh.manifestVersion: 1` e i metadati
+localizzati in `locale/`; il repository GitHub è pubblico con i topic
+`dsh-plugin`, `dsh`, `dsh-bundle`, `dsh-plugins`, `i18n`, `workspace`.
 
 Verificato il 27/11 (DSH 0.2.2-rc.1, pnpm 12.23):
 
@@ -45,6 +48,12 @@ integration: log reale 1322 eventi, 170 marker ri-puntati; la copia viene
 host:      GET /api/additions.info -> 200, version 0.10.0
 bundle:    /plugins/??dsh-additions/client.js&rev=… -> 200 (preflight e reason.*)
 pacchetto: dist/dsh-additions-0.10.0.tgz — 23 file, 134,0 kB, sha1 0765e393…
+npm:       dsh-additions@0.10.0 — 23 file, 132,1 kB, shasum a5134121…,
+           fileCount 23, latest 0.10.0; in `versions` resta il placeholder
+           0.0.0-stage creato dal primo publish (innocuo, non è `latest`)
+smoke:     profilo pulito `pubtest` creato con `dsh plugin --profile pubtest add
+           dsh-additions` (968 ms); il modulo host si carica (Config/apply) e
+           readPluginMeta risolve titolo/descrizione dalla copia npm
 profilo:   dsh-additions@0.10.0 da file:…/dist/dsh-additions-0.10.0.tgz
 pnpm:      profilo migrato a pnpm 12.23/store v11; lockfile v9 invariato
 ```
@@ -594,10 +603,13 @@ la localizzazione in 0.10.0; restano i video, la CI e la release.
 3. **Aggiornare il bundle installato**: il profilo usa il tarball
    `file:…/dist/dsh-additions-0.10.0.tgz`; dopo ogni modifica al codice servono
    `npm pack` + rimozione/reinstallazione (vedi «Come riprendere»).
-4. **P1**: CI multi-OS/Node, test ermetici, smoke test da artefatto pubblicato,
-   README inglese, revisione madrelingua delle traduzioni.
-5. **Pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
-   e/o il repository GitHub, oggi privato; poi lo smoke test in un profilo pulito.
+4. **P1**: CI multi-OS/Node, test ermetici, README inglese, revisione
+   madrelingua delle traduzioni.
+5. **Chiudere la release**: tag `v0.10.0` + release GitHub (con il tarball allegato
+   e, se si vuole, il campo `tarball:` nella entry), poi la PR di listing su
+   `awesome-dsh-plugin` (`data/plugins/kormoran__dsh-additions.yml`). Il pacchetto
+   è già su npm (`dsh-additions@0.10.0`) e lo smoke test nel profilo pulito
+   `pubtest` è passato.
 6. Restano aperti e documentati tre punti UX/ambiente: titolo delle copie
    fork-derived senza `session/title` (workaround `/rename`), deselezione della
    chat aperta dopo l'archiviazione (nessuna API pubblica), matrice multi-OS.
