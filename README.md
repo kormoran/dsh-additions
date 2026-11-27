@@ -1,13 +1,13 @@
 # dsh-additions
 
-Comandi per DeepSeek Harness — e lo spostamento di una chat in un altro
-workspace, portandosi dietro la storia.
+Comandi e funzioni aggiuntive per DeepSeek Harness.
 
-Il plugin nasce come `dsh-chatshifter`, quando conteneva solo lo spostamento; ora
-il nome è `dsh-additions` perché è il posto dove aggiungere ciò che serve — un
-comando, un pannello, un'azione — senza aprire un plugin nuovo ogni volta.
-(Nel mezzo è passato da `dsh-commander`, abbandonato perché il nome è occupato su
-npm da un plugin di terzi.)
+Il plugin è un insieme di funzioni aggiunte per mia comodità man mano che usavo l'harness; 
+da qui il nome `dsh-additions` perché è il posto dove aggiungere ciò che serve — un
+comando, un pannello, un'azione — senza aprire un plugin nuovo ogni volta. 
+Per questo motivo ho lasciato la versione a 0.x.0 invece di mettere "1.0.0" in pubblicazione: visto
+che è una collezione di funzioni, probabilmente non ci sarà mai una versione "completa" di
+questo plugin. A maggior ragione perché dsh stesso è ancora in versione 0.2.2 al momento, quindi tutto è ancora in divenire.
 
 - **comando** (`lib/quit.js`) — `/quit` ferma il processo DSH dal composer, con
   percorso ordinato e watchdog di uscita;
@@ -102,6 +102,10 @@ emette `SIGINT` sul processo: è lo stesso percorso di `Ctrl+C` nel terminale di
 lancio, quello che smonta i plugin e chiude il server web. Se lo smontaggio si
 blocca, un watchdog chiama `process.exit(0)` dopo `graceMs`.
 
+Lo scopo di questo comando è chiudere il processo node.js in cui gira dsh nel caso
+si sia lanciato l'harness senza finestra console (come faccio io, per non avere
+ancora un'altra finestra fra i piedi). Se no l'unica è killarlo da gestione attività.
+
 | Config (`quit`) | Default | Significato |
 |---|---|---|
 | `command` | `quit` | nome del comando |
@@ -113,18 +117,18 @@ La scheda del browser **non** si chiude da sola: Chrome ed Edge ignorano
 sistema, non via `window.open`). Chiudi la scheda quando la pagina segnala la
 disconnessione: il server intanto si è fermato davvero.
 
-Due cose da sapere: `/quit` interrompe anche un turno in corso, e il log della
-sessione resta rileggibile al resume successivo; `/quit` con argomenti viene
-rifiutato (`/quit takes no argument.`) senza spegnere nulla.
+Due cose da sapere: 
+1. `/quit` interrompe anche un turno in corso, e il log della sessione resta rileggibile al resume successivo; 
+2. `/quit` con argomenti viene rifiutato (`/quit takes no argument.`) senza spegnere nulla.
 
 ## Segnali sonori
 
-Due avvisi acustici, per non dover guardare lo schermo mentre il modello lavora:
+Due avvisi acustici (disabilitabili), per non dover guardare lo schermo e poter fare altro mentre il modello lavora:
 
 | Segnale | Quando | Suono predefinito |
 |---|---|---|
 | `ding` | il modello **finisce il turno** (`running: true → false`) | campana sintetizzata |
-| `approval` | c'è una **richiesta di permesso** in attesa (`pendingInteraction.kind === 'approval'`) | «uh oh», due sillabe discendenti |
+| `approval` | c'è una **richiesta di permesso** in attesa (`pendingInteraction.kind === 'approval'`) | «uh oh» |
 
 I due eventi si leggono da `uiSession.sessionStatus`, lo stesso stato che il
 client usa per i puntini di attività: nessun listener entra nel waterfall delle
@@ -291,10 +295,6 @@ Da pacchetto (tarball o npm):
 dsh plugin --profile web add C:\percorso\dsh-additions-0.3.0.tgz
 ```
 
-> Il nome npm `dsh-additions` è libero (verificato il 24/11: 404 sul registry),
-> quindi è pubblicabile. Da evitare `dsh-commander` (occupato da un plugin di
-> terzi) e l'accostamento a `dsh-toy`.
-
 Da repository GitHub, se il repository è accessibile:
 
 ```powershell
@@ -306,10 +306,6 @@ Per lo sviluppo, con link al checkout:
 ```powershell
 dsh plugin --profile web add link:C:\percorso\dsh-additions
 ```
-
-La riga `insert` di `cordis.patch.yml` è il bundle; la metà browser è dichiarata
-in `package.json` sotto `dsh.client` e servita da `/plugins`. Nessun passo di
-build: il bundle browser è scritto a mano nel formato factory del module loader.
 
 Il canale di installazione decide come si aggiorna il profilo:
 
@@ -379,56 +375,6 @@ Il client localizza `source-busy`, `subagent-session`, `empty-session`,
 `session-not-found` e `move-in-progress`; per gli altri codici mostra il
 `message` dell'host.
 
-## Sviluppo
-
-Serve Node.js ≥ 22.8: `--test-isolation` esiste solo da lì, ed è indispensabile
-sotto la sandbox DSH, dove `node --test` con isolamento di processo muore con
-`spawn EPERM` (i figli non possono aprire pipe). Il pattern dei test è espanso da
-Node stesso, non dalla shell, quindi il comando funziona identico su PowerShell,
-cmd e POSIX.
-
-```powershell
-npm install                           # una volta: @deepseek-ai/schemastery (schema delle impostazioni)
-npm test                              # node --test --test-isolation=none "tests/*.test.js"
-node scripts/integration.mjs
-```
-
-`@deepseek-ai/schemastery` è una dipendenza vera del pacchetto (è la libreria di
-schema che DSH usa per la configurazione dei plugin). Senza `node_modules` il
-plugin si carica lo stesso — `Config` resta indefinito, la pagina delle
-impostazioni non compare e il test dello schema viene saltato — ma per usare il
-namespace `additions` serve installarla.
-
-Aggiungendo un file `tests/*.test.js` viene raccolto dal glob senza toccare
-`package.json`.
-
-I test unitari usano servizi finti; `scripts/integration.mjs` compone lo
-`SessionStore` e il backend JSONL reali dall'installazione dsh locale, legge una
-sessione reale (in sola lettura) e verifica che la copia sia materializzata
-sotto il workspace di destinazione e riapribile con la stessa storia.
-
-## Distribuzione
-
-`package.json` è pronto per npm, per il tarball e per l'installazione da GitHub;
-il pacchetto spedisce solo `lib/`, `cordis.patch.yml`, README, LICENSE e
-CHANGELOG.
-
-```powershell
-npm test
-npm pack --pack-destination dist
-tar -tf dist\dsh-additions-0.3.0.tgz
-```
-
-Poi scegli il canale:
-
-- **tarball** — distribuisci `dist\dsh-additions-0.5.3.tgz` e installalo con
-  `dsh plugin --profile web add <file>.tgz`;
-- **npm** — `npm publish` con il nome `dsh-additions` (libero sul registry);
-- **GitHub** — il repository deve essere pubblico o accessibile con credenziali;
-  poi `dsh plugin --profile web add github:kormoran/dsh-additions`.
-
-Il tarball contiene i file dichiarati in `files`; `tests/`, `scripts/`,
-`PROJECT_STATE.md` e `probe-report.json` restano fuori dal pacchetto.
 
 ## Limiti noti
 
@@ -451,5 +397,3 @@ Il tarball contiene i file dichiarati in `files`; `tests/`, `scripts/`,
 - **Archiviando la chat aperta**, il client non ne azzera la selezione come fa
   l'archiviazione nativa: la vista resta finché non si naviga altrove. Non
   esiste un'API pubblica per chiudere la vista corrente.
-- La matrice multi-OS non è ancora in CI: il confronto dei percorsi è
-  case-sensitive fuori da Windows/macOS, ma è verificato solo su Windows.

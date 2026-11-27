@@ -1,31 +1,11 @@
-# TODO — verso la 1.0.0
+# TODO
 
-Backlog operativo per la 1.0.0 di `dsh-additions` (ex `dsh-chatshifter`).
+Backlog operativo per `dsh-additions`.
 
-Punto di partenza: **0.2.0** (commit `8ea2573`, tag `v0.2.0`, 28/28 test,
-tarball in `dist/`). Obiettivo: release stabile, sicura e distribuibile.
-Aggiornato: **2026-11-12**; si riparte il **13/11**.
-
-Strategia consigliata: chiudere i P0, pubblicare `1.0.0-rc.1`, fare il smoke
-test in un profilo pulito, poi promuovere a `1.0.0` (o direttamente 1.0 se il
-tempo basta).
 
 ## P0 — bloccanti (dati e compatibilità)
 
 - [x] **Metà browser sull'API client corrente**
-  - [x] DSH 0.2.1-rc.2 non espone `ctx.contextMenus`: la voce di spostamento è
-        ora registrata in `sidebar.workspaces.session.menu.item` con
-        `ctx.slots.inject`/`ctx.slots.register` e il flusso è un dialog in
-        `shell.overlay` (0.4.0, 11 test del bundle).
-  - [x] **Pannello destro «Workspace»**: tab registrata su
-        `ctx.sidebarRightTabs.register({id, kind, priority, title, guide})` con
-        corpo in `sidebar.right.pane.tab` e chip in `sidebar.right.pane.tab.title`;
-        consuma `GET /api/additions.workspace-stats` (0.5.0–0.5.2).
-  - [x] Verifica a video (25/11, DSH 0.2.1-rc.2): voce «Sposta nel workspace…»
-        funzionante, chat spostata davvero, `+` → guida → capsula «Workspace» →
-        lista → «Dettagli» con le statistiche. Due trappole trovate e corrette:
-        `MenuItemButton` vuole `onSelect` (0.5.1) e una tab senza voce `guide` è
-        invisibile (0.5.2).
   - [ ] `/quit` ancora non provato a video (interrompe il server, va fatto
         quando non serve la sessione).
 
@@ -46,64 +26,15 @@ tempo basta).
         possono moltiplicare i ding durante workflow) e un breve debounce tra due
         ding ravvicinati.
 
-- [ ] **`/rename` (0.8.0)**
-  - [x] Comando registrato (`commands/list` lo elenca con `dsh-additions:rename`),
-        parsing del titolo e percorso di sola lettura (`/rename` senza argomento)
-        verificati via RPC autenticata.
-  - [ ] Prova a video del rename effettivo: `/rename Nuovo titolo` deve cambiare
-        la riga in sidebar e il titolo deve restare dopo un riavvio.
-  - [ ] Valutare se aggiungere anche un comando per *leggere* il titolo corrente
-        (oggi lo mostra solo l'uso senza argomento).
-
 - [ ] **`/quit` — comportamento con lavoro in corso**
   - [x] Scelta: **interrompe** (deciso 27/11). Il comando deve funzionare sempre;
         il log resta rileggibile al resume e il README lo documenta.
   - [ ] Verifica a video del comando dopo il riavvio di `dsh web`.
 
-- [x] **Rinomina del repository**
-  - [x] Repository GitHub rinominato `kormoran/dsh-chatshifter` →
-        `kormoran/dsh-additions` (26/11), remote locale aggiornato e
-        `package.json`/README allineati in 0.5.3. La cartella locale resta
-        `I:\src\dsh-chatshifter` (ci puntano il workspace DSH e la spec `file:`
-        del profilo).
-  - [x] Nome npm: `dsh-additions` è libero (404 sul registry, 24/11); scartati
-        `dsh-commander` (occupato da `yusi5587`) e `dsh-toys` (troppo vicino a
-        `dsh-toy`, plugin esistente).
-
-- [x] **Validare la copia prima di archiviare l'originale** (0.9.0)
-  - [x] Dopo `writeClone`, riaprire la nuova sessione in sola lettura e leggere tutti gli eventi.
-  - [x] Confrontare lunghezza, seq dense, tipi, timestamp, `isSeeded`/cut e marker `delivery-accepted` con la copia scritta.
-  - [x] Se la verifica fallisce: `clone-invalid`, nessuna `archiveSession`, cleanup best-effort (solo percorsi assoluti).
-  - [x] Test: evento mancante → la copia non viene registrata né l'originale archiviato; integrazione reale su 1.322 eventi.
-
-- [x] **Chat in esecuzione / job attivi** (0.9.0)
-  - [x] Scelta: **rifiutare** (`source-busy`, 409) senza toccare nulla.
-  - [x] Host: waterfall `workspace/session-activity` (turno, subagenti, job, promemoria) prima della copia.
-  - [x] Client: preflight `GET /api/additions.preflight` all'apertura del dialog, motivo localizzato; la riga di menu resta sempre visibile (motivo mostrato nel dialog).
-  - [x] Test: sorgente con turno e con job registrato; preflight per subagente/vuota/inesistente.
-
-- [x] **Fallimenti parziali, retry e idempotenza** (0.9.0)
-  - [x] `attachSession` fallito: cleanup best-effort della copia + `attach-failed` con id e motivo.
-  - [x] Lock per sessione sorgente (`move-in-progress`).
-  - [x] Idempotenza per `requestId` (stesso id → stessa copia; i fallimenti si possono ritentare).
-  - [x] Test: attach fallito, doppia richiesta concorrente, replay del requestId.
-
-- [x] **Audit completo delle identità nel log copiato** (0.9.0)
-  - [x] `job/registered`/`job/settled`: **esentati** — il contratto del formato dice che la storia copiata non trasferisce l'esecuzione; `owner` resta la sorgente.
-  - [x] `subagent/catalog`: nomina le sessioni figlie, esentato; il resto del log è testo o riferimenti altrui.
-  - [x] Test con delivery marker, job, catalog e testo che cita l'id: solo il marker viene ri-puntato. Audit su log reali: solo delivery (`sessionId`) e job (`owner`).
 
 - [ ] **Path, id e formati multipiattaforma** (0.9.0, parziale)
-  - [x] Confronto directory consapevole della piattaforma (`pathsEqual`: case-insensitive su Windows/macOS).
-  - [x] `realpath`/`stat` già usati per symlink e path non risolvibili (canonicalizzazione con fallback).
-  - [x] Id sessione validato (niente spazi, caratteri di controllo o separatori di percorso).
-  - [x] Header senza versione di formato valida → `unsupported-format`; i log v0–v3 sono tradotti in memoria dal backend e la copia nasce nella versione logica corrente.
   - [ ] Test su Windows, Linux e macOS (serve CI).
 
-- [x] **Contratto di compatibilità DSH** (0.9.0)
-  - [x] `engines.dsh` = `>=0.2.2-rc.1 <0.3.0-0`.
-  - [x] API host/client elencate nel README (sezione «Compatibilità»).
-  - [x] Matrice testata: DSH 0.2.2-rc.1 su Windows; una versione successiva resta da provare.
 
 - [ ] **Bug UX noti**
   - [ ] Archiviando la chat aperta, il client deve deselezionarla/chiudere la vista come fa Archive nativo: non esiste un'API pubblica per la selezione corrente, documentato nei limiti.
