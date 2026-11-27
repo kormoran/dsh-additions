@@ -111,8 +111,13 @@ tempo basta).
       `ERR_PNPM_UNEXPECTED_STORE`. Rimedio applicato: `pnpm install` nel
       profilo (lockfile v9 e versioni invariati), verifica con
       `--frozen-lockfile` e con una `remove` reale su una copia.
-  - [ ] **Pulizia macchina**: `npm rm -g pnpm` per eliminare la copia 10.34.9
-        rimasta in `%APPDATA%\npm` (va fatta a mano, fuori dall'agente).
+  - [x] **Pulizia macchina**: `npm rm -g pnpm` eseguito dall'utente il 27/11;
+        resta un solo pnpm (12.23.0, store v11).
+  - [x] **Profilo allineato**: alias `dsh-chatshifter` rimosso e bundle
+        reinstallato come `dsh-additions@0.7.0` dal tarball
+        `file:…/dist/dsh-additions-0.7.0.tgz`; riga `additions` active,
+        namespace `additions` servito, bundle client servito dalla copia
+        installata.
   - [ ] Nota per il futuro: a ogni major di pnpm (store `vN` → `vN+1`) serve un
         `pnpm install` nel profilo, altrimenti `plugin_manager add/remove` si
         blocca di nuovo.

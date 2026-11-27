@@ -17,11 +17,12 @@ e richiesta di autorizzazione hanno una **pagina di configurazione** nel plugin.
 
 ## Stato: 0.7.0 — namespace `additions` e pagina di configurazione dei suoni
 
-`dsh-additions` v0.7.0 è nel profilo `web` come **link** al checkout (la
-dipendenza nel profilo si chiama ancora `dsh-chatshifter`, alias storico: il
-bundle è lo stesso e la riga `additions` è `active`). Il pacchetto dichiara il
-namespace di impostazioni `additions` e la metà browser registra la sua pagina in
-`plugins.row.config`.
+`dsh-additions` v0.7.0 è nel profilo `web` come **tarball**
+(`file:C:/Users/…/dist/dsh-additions-0.7.0.tgz`), la riga `additions` del loader
+è `active` e il vecchio alias `dsh-chatshifter` è stato rimosso (27/11). Il
+pacchetto dichiara il namespace di impostazioni `additions` e la metà browser
+registra la sua pagina in `plugins.row.config`; aggiornare il codice ora
+richiede `npm pack` + reinstallazione del tarball.
 
 Verificato il 27/11 (DSH 0.2.2-rc.1, pnpm 12.23):
 
@@ -39,6 +40,9 @@ pacchetto: dist/dsh-additions-0.7.0.tgz — 12 file, 119,7 kB, sha1 9ddc4d7f…
 pnpm:      profilo migrato a pnpm 12.23/store v11; `pnpm install` 19,5 s, lockfile v9
            invariato (solo il link di dsh-locale-it allineato), `pnpm install --frozen-lockfile`
            no-op in 74 ms, una `pnpm remove` reale in una copia ha funzionato in 1,3 s
+profilo:   alias rimosso e pacchetto reinstallato: dsh-additions@0.7.0 da
+           file:…/dist/dsh-additions-0.7.0.tgz; vecchio link dsh-chatshifter sparito;
+           schemastery fra le dipendenze; describe/info/bundle verificati sulla copia installata
 ```
 
 Non provato a video: la pagina nella UI (apertura, caselle, Salva) e l'effetto
@@ -448,13 +452,18 @@ dsh plugin --profile web why dsh-additions
 # oppure, dall'agente: plugin_manager list_plugins / list_bundles
 ```
 
-Per aggiornare il plugin nel profilo live: con `link:` il codice del checkout è
-già nel profilo; dopo una modifica alla metà host (o alla patch) la voce
-`additions` va disabilitata e riabilitata dalla pagina Plugin. Per la metà
-browser vale la revisione per metadati: anche lì serve il toggle della voce (il
-solo reload della pagina non rilegge il bundle). Una voce **nuova** (o
-reinstallata con un altro nome) entra nel grafo solo se il profilo è live e HMR
-la ricompone; in caso contrario serve riavviare `dsh web`.
+Per aggiornare il plugin nel profilo live **ora che è un tarball**: `npm pack`
+nella repo, poi (dalla pagina Plugins o dall'agente) rimuovere e reinstallare il
+bundle `dsh-additions` con il nuovo `dist/dsh-additions-<versione>.tgz`. La
+rimozione ferma la riga `additions` e cancella la dipendenza `file:`; la
+reinstallazione la riporta in coda alla selezione e la applica a caldo. Le
+impostazioni salvate dalla pagina restano (il patch del profilo è per id
+`additions`, non per nome della dipendenza). Dopo una modifica alla sola metà
+browser serve comunque il toggle della voce, perché la revisione del bundle è
+letta dai metadati del file installato; dopo una modifica alla metà host serve
+riavviare la riga. Una voce **nuova** (o reinstallata con un altro nome) entra nel
+grafo se il profilo è live e HMR la ricompone; in caso contrario serve riavviare
+`dsh web`.
 
 Attenzione all'ambiente (risolto il 27/11): il profilo era legato allo store
 pnpm `v10` (installato con pnpm 10.34.9) mentre il `pnpm` in PATH era la
@@ -479,11 +488,10 @@ Si riparte da [TODO.md](TODO.md), dai P0.
    `dsh-additions` → riga `additions` → configurazione; provare la casella, le
    due caselle di testo, Salva e l'effetto udibile di un file sostituito a
    pagina aperta.
-2. **Migrare il profilo all'alias giusto** (`dsh-additions` invece di
-   `dsh-chatshifter`): ora che pnpm è migrato, `plugin_manager remove_bundle
-   dsh-chatshifter` e `install_bundle` del tarball `dist/dsh-additions-0.7.0.tgz`
-   dovrebbero funzionare. Oggi la pagina funziona comunque perché registriamo
-   entrambe le chiavi; la rinomina serve a togliere l'ambiguità.
+2. **Aggiornare il bundle installato**: il profilo usa ora il tarball
+   `file:…/dist/dsh-additions-0.7.0.tgz`; dopo ogni modifica al codice servono
+   `npm pack` + rimozione/reinstallazione del bundle (vedi «Come riprendere»).
+   Se la cartella della repo cambia, la spec `file:` del profilo va riallineata.
 3. **`/quit` a video**: interrompe il server, va fatto quando la sessione non
    serve.
 4. **Pubblicare**: decidere il canale — npm con il nome `dsh-additions` (libero)
